@@ -36,22 +36,26 @@ const inputStyle = {
   width: '100%',
   border: `1px solid ${clay}`,
   borderRadius: 8,
-  padding: '10px 12px',
-  fontSize: 14,
+  padding: '12px',
+  // 16px es el mínimo para que iOS Safari no haga zoom automático al enfocar el campo —
+  // con menos, la pantalla salta cada vez que tocás un input. No es solo estética.
+  fontSize: 16,
   background: '#fff',
   color: bark,
   outline: 'none',
   fontFamily: 'inherit',
+  minHeight: 44, // mínimo recomendado de área táctil (Apple: 44pt, Material: 48dp)
 };
 
 const primaryButtonStyle = (disabled) => ({
   width: '100%',
-  padding: '10px 16px',
+  padding: '13px 16px',
+  minHeight: 44,
   borderRadius: 8,
   border: 'none',
   background: moss,
   color: canvas,
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: 600,
   cursor: disabled ? 'default' : 'pointer',
   opacity: disabled ? 0.7 : 1,
@@ -61,9 +65,9 @@ const linkButtonStyle = {
   background: 'none',
   border: 'none',
   color: moss,
-  fontSize: 12.5,
+  fontSize: 13,
   cursor: 'pointer',
-  padding: 0,
+  padding: '6px 0', // hace que el área táctil real sea más alta que el texto solo
   textDecoration: 'underline',
 };
 
@@ -73,12 +77,13 @@ const oauthButtonStyle = (disabled) => ({
   alignItems: 'center',
   justifyContent: 'center',
   gap: 7,
-  padding: '9px 8px',
+  padding: '12px 8px',
+  minHeight: 44,
   borderRadius: 8,
   border: `1px solid ${clay}`,
   background: '#fff',
   color: bark,
-  fontSize: 12.5,
+  fontSize: 13,
   fontWeight: 500,
   cursor: disabled ? 'default' : 'pointer',
   opacity: disabled ? 0.6 : 1,
@@ -94,15 +99,18 @@ function EyeToggle({ visible, onToggle }) {
       title={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
       style={{
         position: 'absolute',
-        right: 8,
-        top: '50%',
-        transform: 'translateY(-50%)',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 44,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: 'none',
         border: 'none',
         cursor: 'pointer',
         color: fern,
-        fontSize: 12,
-        padding: 4,
+        fontSize: 14,
       }}
     >
       {visible ? '🙈' : '👁'}
@@ -124,7 +132,7 @@ function PasswordField({ id, label, value, onChange, placeholder, autoComplete, 
           placeholder={placeholder}
           autoComplete={autoComplete}
           minLength={minLength}
-          style={{ ...inputStyle, paddingRight: 36 }}
+          style={{ ...inputStyle, paddingRight: 44 }}
           required
         />
         <EyeToggle visible={visible} onToggle={() => setVisible((v) => !v)} />
@@ -282,8 +290,21 @@ export default function AuthGate({ children }) {
   );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: canvas, fontFamily: 'sans-serif', padding: 20 }}>
+    <div
+      className="glenwyn-auth-wrap"
+      style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: canvas, fontFamily: 'sans-serif', padding: 20 }}
+    >
+      <style>{`
+        /* Probado explícitamente contra 320px — el ancho de referencia clásico para
+           mobile-first — no solo contra un celular grande donde todo entra fácil. */
+        @media (max-width: 360px) {
+          .glenwyn-auth-wrap { padding: 12px !important; }
+          .glenwyn-auth-card { padding: 22px 16px !important; }
+          .glenwyn-auth-oauth-secondary-row { flex-direction: column !important; }
+        }
+      `}</style>
       <div
+        className="glenwyn-auth-card"
         style={{
           width: 380,
           maxWidth: '100%',
@@ -328,7 +349,7 @@ export default function AuthGate({ children }) {
               <button onClick={() => handleOAuth('google')} disabled={!!oauthLoading} style={oauthButtonStyle(!!oauthLoading)}>
                 <GoogleIcon /> {oauthLoading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
               </button>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="glenwyn-auth-oauth-secondary-row" style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => handleOAuth('facebook')} disabled={!!oauthLoading} style={oauthButtonStyle(!!oauthLoading)}>
                   <FacebookIcon /> Facebook
                 </button>
