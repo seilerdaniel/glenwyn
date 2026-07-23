@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guía de uso — Glenwyn</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --canvas: #F6F3EC;
+    --canvas-alt: #EFEAE0;
+    --sidebar-bg: #EFEAE0;
+    --bark: #2E2A24;
+    --fern: #7C8B6F;
+    --moss: #4A5D45;
+    --clay: #E8E2D3;
+    --sun: #C9A876;
+    --error: #994530;
+  }
+  [data-theme="dark"] {
+    --canvas: #1C1F1A;
+    --canvas-alt: #20241D;
+    --sidebar-bg: #181B15;
+    --bark: #E8E4D9;
+    --fern: #8FA085;
+    --moss: #6B8060;
+    --clay: #2E332A;
+    --sun: #D4B483;
+    --error: #E08A65;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--bark);
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    transition: background-color 200ms ease, color 200ms ease;
+    -webkit-font-smoothing: antialiased;
+  }
+  .display { font-family: 'Fraunces', Georgia, serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ---- Left rail: styled after Glenwyn's own sidebar ---- */
+  .rail {
+    width: 250px;
+    flex-shrink: 0;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--clay);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 20px 14px;
+    transition: width 200ms ease, background-color 200ms ease;
+  }
+  .rail.collapsed { width: 64px; padding: 20px 10px; }
+  .rail-brand {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 22px; padding: 0 4px;
+  }
+  .rail-brand .wordmark {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px;
+    color: var(--moss); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden;
+  }
+  .rail.collapsed .wordmark, .rail.collapsed .rail-label, .rail.collapsed .rail-eyebrow { display: none; }
+  .rail-toggle {
+    background: none; border: none; cursor: pointer; color: var(--fern);
+    padding: 6px; border-radius: 6px; display: flex; align-items: center; flex-shrink: 0;
+  }
+  .rail-toggle:hover { background: var(--clay); }
+  .rail-eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fern); padding: 14px 8px 6px; opacity: 0.8;
+  }
+  .rail-link {
+    display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 7px;
+    color: var(--fern); text-decoration: none; font-size: 13.5px; cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .rail-link:hover { background: var(--clay); color: var(--bark); }
+  .rail-link.active { background: var(--clay); color: var(--bark); }
+  .rail-link .ic { font-size: 14px; flex-shrink: 0; width: 18px; text-align: center; }
+  .rail.collapsed .rail-link { justify-content: center; }
+  .rail-bottom { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--clay); }
+
+  /* ---- Main content ---- */
+  .content {
+    flex: 1; min-width: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(120,120,90,0.06) 1px, transparent 0);
+    background-size: 18px 18px;
+  }
+  .wrap { max-width: 740px; margin: 0 auto; padding: 0 32px 120px; }
+
+  /* ---- Hero ---- */
+  .hero { padding: 90px 0 60px; }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--fern); margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(38px, 6vw, 58px);
+    line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 20px; color: var(--bark);
+  }
+  .hero h1 em { color: var(--moss); font-style: italic; }
+  .hero p.lede {
+    font-size: 18px; line-height: 1.6; color: var(--fern); max-width: 520px; margin: 0 0 28px;
+  }
+  .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    font-family: 'Public Sans', sans-serif; font-size: 13.5px; font-weight: 600;
+    padding: 10px 18px; border-radius: 8px; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--moss); color: var(--canvas); }
+  .btn-secondary { background: transparent; color: var(--bark); border-color: var(--clay); }
+
+  /* ---- Sections ---- */
+  section { padding: 56px 0; border-top: 1px solid var(--clay); }
+  section:first-of-type { border-top: none; }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--fern); margin-bottom: 10px;
+  }
+  h2 {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 30px; letter-spacing: -0.01em;
+    margin: 0 0 12px; color: var(--bark);
+  }
+  h3 {
+    font-family: 'Public Sans', sans-serif; font-weight: 600; font-size: 16px; margin: 24px 0 10px; color: var(--bark);
+  }
+  p { line-height: 1.75; font-size: 15.5px; color: var(--bark); }
+  p.muted { color: var(--fern); }
+  ul, ol { line-height: 1.8; font-size: 15.5px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  a.inline-link { color: var(--moss); }
+  code {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--clay);
+    padding: 1px 6px; border-radius: 4px; color: var(--bark);
+  }
+
+  /* ---- Steps (quick start) ---- */
+  .steps { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
+  .step { display: flex; gap: 16px; align-items: flex-start; }
+  .step-num {
+    font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600; color: var(--sun);
+    width: 32px; flex-shrink: 0;
+  }
+  .step-body h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .step-body p { margin: 0; font-size: 14.5px; }
+
+  /* ---- Feature grid (shortcuts summary cards) ---- */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+  .card {
+    background: var(--canvas-alt); border: 1px solid var(--clay); border-radius: 10px; padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--fern); }
+
+  /* ---- Markdown shortcuts table ---- */
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+  th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 0.05em; color: var(--fern); padding: 8px 10px; border-bottom: 1px solid var(--clay); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--clay); vertical-align: top; }
+  td code { white-space: nowrap; }
+
+  /* ---- Block showcase: each card visually mimics the real block ---- */
+  .block-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin-top: 22px; }
+  .block-card {
+    background: var(--canvas-alt); border: 1px solid var(--clay); border-radius: 10px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .block-card .label { font-size: 12.5px; font-weight: 600; color: var(--fern); font-family: 'JetBrains Mono', monospace; }
+  .mini-heading { font-family: 'Fraunces', serif; font-weight: 500; font-size: 16px; }
+  .mini-todo { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+  .mini-checkbox { width: 14px; height: 14px; border: 1.5px solid var(--fern); border-radius: 3px; flex-shrink: 0; }
+  .mini-bullet { display: flex; gap: 8px; font-size: 13.5px; }
+  .mini-quote { border-left: 2.5px solid var(--moss); padding-left: 10px; font-style: italic; color: var(--fern); font-size: 13.5px; }
+  .mini-callout { background: var(--clay); border-radius: 6px; padding: 8px 10px; font-size: 13px; display: flex; gap: 6px; }
+  .mini-toggle { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; }
+  .mini-divider { height: 1px; background: var(--clay); margin: 4px 0; }
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mini-table td { border: 1px solid var(--clay); padding: 4px 6px; }
+  .mini-table tr:first-child td { background: var(--clay); font-weight: 600; }
+  .mini-image { height: 44px; border-radius: 6px; background: linear-gradient(135deg, var(--clay), var(--sun) 140%); }
+  .mini-embed { height: 44px; border-radius: 6px; background: var(--bark); opacity: 0.15; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .mini-link { font-size: 13.5px; color: var(--moss); text-decoration: underline; }
+  .mini-mention { font-size: 13.5px; }
+  .mini-mention span { color: var(--moss); text-decoration: underline; }
+
+  /* ---- Kbd chips ---- */
+  kbd {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--clay); color: var(--bark);
+    padding: 3px 8px; border-radius: 5px; display: inline-block;
+  }
+  .shortcut-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--clay); font-size: 14px; gap: 16px; }
+  .shortcut-row span.desc { color: var(--fern); }
+
+  /* ---- Resource list ---- */
+  .resource-list { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+  .resource-item { display: flex; align-items: baseline; gap: 10px; padding: 10px 14px; background: var(--canvas-alt); border: 1px solid var(--clay); border-radius: 8px; }
+  .resource-item .name { font-weight: 600; font-size: 14.5px; }
+  .resource-item .desc { font-size: 13px; color: var(--fern); }
+
+  footer { padding: 40px 0 20px; text-align: center; }
+  footer p { color: var(--fern); font-size: 13px; }
+
+  /* ---- Mobile ---- */
+  @media (max-width: 760px) {
+    .rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 20; transform: translateX(-100%);
+            width: min(80vw, 260px) !important; box-shadow: 4px 0 24px rgba(0,0,0,0.2); }
+    .rail.mobile-open { transform: translateX(0); }
+    .rail.collapsed .wordmark, .rail.mobile-open .wordmark,
+    .rail.mobile-open .rail-label { display: block; }
+    .mobile-menu-btn { display: flex !important; }
+    .wrap { padding: 0 20px 100px; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  .mobile-menu-btn {
+    display: none; position: fixed; top: 16px; left: 16px; z-index: 21;
+    background: var(--canvas-alt); border: 1px solid var(--clay); border-radius: 8px;
+    width: 38px; height: 38px; align-items: center; justify-content: center; cursor: pointer; color: var(--bark);
+  }
+  .backdrop { display: none; position: fixed; inset: 0; background: rgba(20,20,15,0.35); z-index: 19; }
+  .backdrop.show { display: block; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Abrir menú">☰</button>
+<div class="backdrop" id="backdrop"></div>
+
+<div class="layout">
+  <nav class="rail" id="rail">
+    <div class="rail-brand">
+      <span class="wordmark">Glenwyn</span>
+      <button class="rail-toggle" id="railToggle" aria-label="Colapsar menú" title="Colapsar menú">⋮</button>
+    </div>
+
+    <div class="rail-eyebrow">Empezar</div>
+    <a class="rail-link" data-target="quickstart"><span class="ic">◇</span><span class="rail-label">Primeros pasos</span></a>
+    <a class="rail-link" data-target="sidebar"><span class="ic">▤</span><span class="rail-label">Navegación</span></a>
+
+    <div class="rail-eyebrow">Escribir</div>
+    <a class="rail-link" data-target="writing"><span class="ic">✍</span><span class="rail-label">Bloques y comandos</span></a>
+    <a class="rail-link" data-target="markdown"><span class="ic">#</span><span class="rail-label">Atajos de markdown</span></a>
+    <a class="rail-link" data-target="blocks"><span class="ic">▦</span><span class="rail-label">Todos los bloques</span></a>
+
+    <div class="rail-eyebrow">Organizar</div>
+    <a class="rail-link" data-target="tasks"><span class="ic">✓</span><span class="rail-label">Tareas</span></a>
+    <a class="rail-link" data-target="backlinks"><span class="ic">⟲</span><span class="rail-label">Backlinks y menciones</span></a>
+    <a class="rail-link" data-target="trash"><span class="ic">🗑</span><span class="rail-label">Papelera e historial</span></a>
+
+    <div class="rail-eyebrow">Compartir</div>
+    <a class="rail-link" data-target="share"><span class="ic">🔗</span><span class="rail-label">Compartir y exportar</span></a>
+    <a class="rail-link" data-target="personalization"><span class="ic">☾</span><span class="rail-label">Personalización</span></a>
+    <a class="rail-link" data-target="mobile"><span class="ic">☰</span><span class="rail-label">Mobile y atajos</span></a>
+
+    <div class="rail-eyebrow">Ayuda</div>
+    <a class="rail-link" data-target="resources"><span class="ic">🧰</span><span class="rail-label">Recursos</span></a>
+
+    <div class="rail-bottom">
+      <a class="rail-link" id="themeToggle"><span class="ic" id="themeIcon">☾</span><span class="rail-label" id="themeLabel">Modo oscuro</span></a>
+    </div>
+  </nav>
+
+  <main class="content">
+    <div class="wrap">
+
+      <header class="hero">
+        <div class="hero-eyebrow">Guía de uso</div>
+        <h1>Un espacio de trabajo<br><em>inmersivo</em>, sin ruido.</h1>
+        <p class="lede">Todo lo que necesitás saber para usar Glenwyn — desde crear tu primera página hasta las menciones inline y las tareas recurrentes. Esta guía está organizada igual que la app: navegá por el menú de la izquierda.</p>
+        <div class="hero-actions">
+          <a href="#quickstart" class="btn btn-primary">Empezar →</a>
+          <a href="#resources" class="btn btn-secondary">Ver recursos</a>
+        </div>
+      </header>
+
+      <section id="quickstart">
+        <div class="eyebrow">01 · Empezar</div>
+        <h2>Primeros pasos</h2>
+        <p>Entrás a Glenwyn e iniciás sesión con Google — no hace falta crear una contraseña nueva. La primera vez vas a ver un espacio vacío invitándote a crear tu primera página.</p>
+        <div class="steps">
+          <div class="step">
+            <span class="step-num display">1</span>
+            <div class="step-body"><h4>Iniciá sesión con Google</h4><p>Un solo click, sin formularios.</p></div>
+          </div>
+          <div class="step">
+            <span class="step-num display">2</span>
+            <div class="step-body"><h4>Creá tu primera página</h4><p>Botón "+ Nueva página" abajo en el sidebar.</p></div>
+          </div>
+          <div class="step">
+            <span class="step-num display">3</span>
+            <div class="step-body"><h4>O arrancá desde una plantilla</h4><p>Tocá la flechita <code>▾</code> al lado para elegir Diario, Notas de reunión, o Brainstorm.</p></div>
+          </div>
+          <div class="step">
+            <span class="step-num display">4</span>
+            <div class="step-body"><h4>Escribí</h4><p>Enter crea el siguiente bloque, <code>/</code> abre el menú de comandos.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="sidebar">
+        <div class="eyebrow">02 · Navegación</div>
+        <h2>El sidebar</h2>
+        <p>Todo tu workspace vive como un árbol de páginas anidadas — igual que carpetas, pero cada una es también una página con su propio contenido.</p>
+        <div class="grid2">
+          <div class="card"><h4>⌘\ <span class="mono" style="font-size:11px;font-weight:400;color:var(--fern)"></span></h4><p>Colapsar o expandir el sidebar entero.</p></div>
+          <div class="card"><h4>⌘K</h4><p>Búsqueda rápida — en títulos y contenido.</p></div>
+          <div class="card"><h4>Arrastrar páginas</h4><p>Soltá antes, después, o dentro de otra para anidarla.</p></div>
+          <div class="card"><h4>⇅ Orden</h4><p>Cicla entre manual, alfabético, y recientes primero.</p></div>
+          <div class="card"><h4>⭐ Favoritos</h4><p>Fijá páginas frecuentes arriba del árbol.</p></div>
+          <div class="card"><h4>Íconos</h4><p>Click en el ícono de cualquier página para elegir un emoji.</p></div>
+        </div>
+      </section>
+
+      <section id="writing">
+        <div class="eyebrow">03 · Escribir</div>
+        <h2>Bloques y comandos</h2>
+        <p>Todo en Glenwyn es un bloque: un párrafo, un encabezado, una tarea, una imagen. Se crean y editan todos de la misma forma.</p>
+        <ul>
+          <li><strong>Enter</strong> al final de un bloque crea el siguiente.</li>
+          <li><strong><code>/</code></strong> en cualquier bloque abre el menú de comandos — escribí para filtrar, <kbd>↑</kbd><kbd>↓</kbd> para navegar, <kbd>Enter</kbd> para elegir.</li>
+          <li><strong>Backspace</strong> en una línea vacía borra el bloque y mueve el cursor al anterior.</li>
+          <li><strong><kbd>⌘</kbd>+<kbd>D</kbd></strong> duplica el bloque actual.</li>
+        </ul>
+      </section>
+
+      <section id="markdown">
+        <div class="eyebrow">04 · Atajos</div>
+        <h2>Atajos de markdown</h2>
+        <p>Escribí estos al principio de una línea y el bloque se convierte solo — sin pasar por el menú <code>/</code>.</p>
+        <table>
+          <tr><th>Escribís</th><th>Se convierte en</th></tr>
+          <tr><td><code># </code> o <code>## </code></td><td>Encabezado</td></tr>
+          <tr><td><code>- </code> o <code>* </code></td><td>Lista con viñetas</td></tr>
+          <tr><td><code>1. </code></td><td>Lista numerada</td></tr>
+          <tr><td><code>- [ ] </code></td><td>Tarea</td></tr>
+          <tr><td><code>&gt; </code></td><td>Cita</td></tr>
+          <tr><td><code>---</code></td><td>Divisor</td></tr>
+          <tr><td>URL de imagen sola en la línea</td><td>Bloque de imagen</td></tr>
+          <tr><td>Link de YouTube/Vimeo/Loom/Spotify solo</td><td>Bloque de embed</td></tr>
+        </table>
+      </section>
+
+      <section id="blocks">
+        <div class="eyebrow">05 · Referencia</div>
+        <h2>Todos los tipos de bloque</h2>
+        <p>Once tipos en total. Cada tarjeta de abajo se ve como se ve el bloque real.</p>
+        <div class="block-grid">
+          <div class="block-card"><span class="label">TEXTO</span><span>Un párrafo simple, la base de todo.</span></div>
+          <div class="block-card"><span class="label">ENCABEZADO</span><span class="mini-heading">Título de sección</span></div>
+          <div class="block-card"><span class="label">TAREA</span><div class="mini-todo"><span class="mini-checkbox"></span> Con fecha, prioridad y recurrencia</div></div>
+          <div class="block-card"><span class="label">LISTA</span><div class="mini-bullet">• Con viñetas</div><div class="mini-bullet">• O numerada</div></div>
+          <div class="block-card"><span class="label">CITA</span><div class="mini-quote">Texto destacado con borde</div></div>
+          <div class="block-card"><span class="label">CALLOUT</span><div class="mini-callout">💡 Nota destacada</div></div>
+          <div class="block-card"><span class="label">DESPLEGABLE</span><div class="mini-toggle">▸ Título siempre visible</div></div>
+          <div class="block-card"><span class="label">IMAGEN</span><div class="mini-image"></div></div>
+          <div class="block-card"><span class="label">TABLA</span>
+            <table class="mini-table"><tr><td>Col A</td><td>Col B</td></tr><tr><td>1</td><td>2</td></tr></table>
+          </div>
+          <div class="block-card"><span class="label">EMBED</span><div class="mini-embed">▶</div></div>
+          <div class="block-card"><span class="label">LINK A PÁGINA</span><div class="mini-link">📄 Otra página</div></div>
+          <div class="block-card"><span class="label">MENCIÓN INLINE</span><div class="mini-mention">Ver <span>[[Otra página]]</span> acá</div></div>
+          <div class="block-card"><span class="label">DIVISOR</span><div class="mini-divider"></div></div>
+        </div>
+      </section>
+
+      <section id="tasks">
+        <div class="eyebrow">06 · Organizar</div>
+        <h2>Tareas: fecha, prioridad y recurrencia</h2>
+        <p>Click en el ícono 📅 junto a una tarea para ponerle fecha de vencimiento — el chip se pone rojo si está vencida, verde si es hoy.</p>
+        <h3>Lenguaje natural</h3>
+        <p>Escribí la fecha directamente en el texto de la tarea y presioná Enter o salí del bloque — se completa sola y se saca del texto:</p>
+        <div class="grid2">
+          <div class="card"><h4>Fechas puntuales</h4><p><code>hoy</code> · <code>mañana</code> · <code>pasado mañana</code> · <code>en 3 días</code> · <code>el viernes</code></p></div>
+          <div class="card"><h4>Recurrentes</h4><p><code>cada día</code> · <code>cada lunes</code> · <code>cada semana</code> · <code>cada mes</code></p></div>
+        </div>
+        <h3>Prioridad</h3>
+        <p>Click en el ⚑ junto a la tarea, cicla entre alta (roja) → media (ámbar) → baja (verde) → ninguna.</p>
+        <h3>Vista global</h3>
+        <p>Botón <strong>"✓ Mis tareas"</strong> arriba del sidebar — junta todas tus tareas con fecha de todo el workspace, agrupadas en Vencidas / Hoy / Próximas / Completadas.</p>
+      </section>
+
+      <section id="backlinks">
+        <div class="eyebrow">07 · Organizar</div>
+        <h2>Backlinks y menciones</h2>
+        <p>Dos formas de conectar páginas entre sí, y ambas cuentan para el mismo panel de "referenciado por":</p>
+        <div class="grid2">
+          <div class="card"><h4>📄 Bloque de link</h4><p>Desde <code>/</code> → "Página" — queda como un bloque propio, clickeable.</p></div>
+          <div class="card"><h4>[[ ]] Mención inline</h4><p>Escribí <code>[[</code> dentro de una oración para buscar y enlazar sin salir del párrafo.</p></div>
+        </div>
+        <p style="margin-top:16px">Al perder el foco del bloque, una mención se ve como link clickeable. Al final de cada página, si alguna otra la menciona, aparece un panel mostrando cuáles.</p>
+      </section>
+
+      <section id="trash">
+        <div class="eyebrow">08 · Organizar</div>
+        <h2>Papelera e historial de versiones</h2>
+        <h3>🗑 Papelera</h3>
+        <p>Archiva una página (junto con sus subpáginas). Restaurala, eliminala para siempre, o vaciá toda la papelera de una vez. Lo que no tocás se borra solo a los 30 días.</p>
+        <h3>⟲ Historial de versiones</h3>
+        <p>Snapshot automático cada 10 minutos mientras editás, o forzalo con "Guardar versión ahora". Restaurar una versión vieja guarda automáticamente un respaldo del estado actual primero, así siempre podés volver atrás.</p>
+      </section>
+
+      <section id="share">
+        <div class="eyebrow">09 · Compartir</div>
+        <h2>Compartir y exportar</h2>
+        <div class="grid2">
+          <div class="card"><h4>🔗 Compartir</h4><p>Link público de solo lectura, sin cuenta necesaria. Rotalo o desactivalo cuando quieras.</p></div>
+          <div class="card"><h4>⬇ Exportar</h4><p>Descarga la página actual como Markdown, con toda la estructura traducida.</p></div>
+        </div>
+      </section>
+
+      <section id="personalization">
+        <div class="eyebrow">10 · Compartir</div>
+        <h2>Personalización</h2>
+        <p>Modo claro/oscuro con el botón ☀/☾ del sidebar (o seguí la preferencia de tu sistema). Íconos de página desde una paleta de 32 emojis, o pegá cualquier otro.</p>
+      </section>
+
+      <section id="mobile">
+        <div class="eyebrow">11 · Compartir</div>
+        <h2>Mobile y atajos de teclado</h2>
+        <p>En pantallas angostas, el sidebar se convierte en un panel deslizable — abrilo con ☰. Todas las acciones que en escritorio aparecen al pasar el mouse están siempre visibles en dispositivos táctiles.</p>
+        <h3>Atajos generales</h3>
+        <div class="shortcut-row"><span><kbd>⌘</kbd>+<kbd>\</kbd></span><span class="desc">Colapsar / expandir el sidebar</span></div>
+        <div class="shortcut-row"><span><kbd>⌘</kbd>+<kbd>K</kbd></span><span class="desc">Búsqueda rápida</span></div>
+        <div class="shortcut-row"><span><kbd>?</kbd></span><span class="desc">Ver todos los atajos (dentro de la app)</span></div>
+        <div class="shortcut-row"><span><kbd>Esc</kbd></span><span class="desc">Cerrar el panel abierto</span></div>
+      </section>
+
+      <section id="resources">
+        <div class="eyebrow">12 · Ayuda</div>
+        <h2>Recursos y herramientas</h2>
+        <h3>Documentación del proyecto</h3>
+        <div class="resource-list">
+          <div class="resource-item"><span class="name mono">README.md</span><span class="desc">Instalación y estructura del proyecto</span></div>
+          <div class="resource-item"><span class="name mono">CHANGELOG.md</span><span class="desc">Historial completo de versiones y auditorías</span></div>
+          <div class="resource-item"><span class="name mono">CHECKLIST.md</span><span class="desc">Pasos pendientes de configuración</span></div>
+        </div>
+        <h3>Infraestructura</h3>
+        <div class="resource-list">
+          <div class="resource-item"><span class="name">Supabase</span><span class="desc">Base de datos, autenticación, y almacenamiento de archivos</span></div>
+          <div class="resource-item"><span class="name">Vercel</span><span class="desc">Hosting del sitio</span></div>
+          <div class="resource-item"><span class="name">Google Cloud Console</span><span class="desc">Credenciales de login con Google</span></div>
+        </div>
+        <h3>Si algo no funciona</h3>
+        <p>Los errores de guardado o carga quedan logueados en la consola del navegador (F12) con el prefijo <code>Glenwyn:</code>. Revisá <code>CHECKLIST.md</code> para confirmar que las migraciones SQL están corridas y que Google OAuth está bien configurado.</p>
+      </section>
+
+      <footer>
+        <p>Glenwyn — un espacio de trabajo inmersivo y distraction-free.</p>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  // Theme: default to system preference, remember choice, toggle via the rail button.
+  const root = document.documentElement;
+  const stored = localStorage.getItem('glenwyn-guide-theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let isDark = stored ? stored === 'dark' : prefersDark;
+  function applyTheme() {
+    root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    document.getElementById('themeIcon').textContent = isDark ? '☀' : '☾';
+    document.getElementById('themeLabel').textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+  }
+  applyTheme();
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    isDark = !isDark;
+    localStorage.setItem('glenwyn-guide-theme', isDark ? 'dark' : 'light');
+    applyTheme();
+  });
+
+  // Rail collapse (desktop)
+  const rail = document.getElementById('rail');
+  document.getElementById('railToggle').addEventListener('click', () => {
+    rail.classList.toggle('collapsed');
+  });
+
+  // Mobile drawer
+  const backdrop = document.getElementById('backdrop');
+  document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+    rail.classList.add('mobile-open');
+    backdrop.classList.add('show');
+  });
+  backdrop.addEventListener('click', () => {
+    rail.classList.remove('mobile-open');
+    backdrop.classList.remove('show');
+  });
+
+  // Nav links: smooth scroll + close mobile drawer
+  document.querySelectorAll('.rail-link[data-target]').forEach((link) => {
+    link.addEventListener('click', () => {
+      const target = document.getElementById(link.dataset.target);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      rail.classList.remove('mobile-open');
+      backdrop.classList.remove('show');
+    });
+  });
+
+  // Active-section highlighting while scrolling
+  const sections = [...document.querySelectorAll('section[id]')];
+  const links = [...document.querySelectorAll('.rail-link[data-target]')];
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          links.forEach((l) => l.classList.toggle('active', l.dataset.target === entry.target.id));
+        }
+      });
+    },
+    { rootMargin: '-20% 0px -70% 0px' }
+  );
+  sections.forEach((s) => observer.observe(s));
+</script>
+
+</body>
+</html>
