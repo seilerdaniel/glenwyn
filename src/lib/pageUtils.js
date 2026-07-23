@@ -1,7 +1,7 @@
 // Pure logic helpers for pages/blocks — no React, no JSX, no hooks.
 // Extracted from App.jsx so this logic can be read and reasoned about on its own.
 
-export const uid = () => Math.random().toString(36).slice(2, 10);
+export const uid = () => crypto.randomUUID();
 
 export const emptyPage = (title = 'Sin título', parentId = null, order = 0) => ({
   id: uid(),
