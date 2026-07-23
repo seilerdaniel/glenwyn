@@ -995,6 +995,15 @@ function Glenwyn({ user }) {
         .glenwyn-divider-row:hover .glenwyn-divider-delete { opacity: 1; }
         .glenwyn-media-row:hover .glenwyn-media-delete { opacity: 1; }
         textarea.glenwyn-block { resize: none; }
+        /* :focus-visible (used elsewhere in the app) mostly only fires on keyboard
+           navigation — for the actual writing area, people click in with the mouse far
+           more often, so this uses plain :focus instead, on purpose. inset box-shadow
+           draws entirely inside the existing box, so it never shifts the text. */
+        textarea.glenwyn-block:focus {
+          outline: none;
+          box-shadow: inset 3px 0 0 0 ${t.moss};
+          border-radius: 3px;
+        }
         .glenwyn-focus:focus-visible { outline: 2px solid ${t.moss} !important; outline-offset: 2px; }
         /* Devices whose primary input has no hover (touch) never get a hover state to
            reveal these actions with — so show them all the time there instead. */
@@ -4605,12 +4614,3 @@ function ReadOnlyBlock({ block: b, t }) {
   }
 }
 
-export default function App() {
-  // No router dependency — a shared page is just a plain, unauthenticated
-  // read-only view keyed off the URL path, entirely separate from the main app.
-  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/share/')) {
-    const token = window.location.pathname.split('/share/')[1];
-    return <SharedPageView token={token} />;
-  }
-  return <AuthGate>{(user) => <Glenwyn user={user} />}</AuthGate>;
-}
