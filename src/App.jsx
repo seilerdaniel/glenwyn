@@ -66,6 +66,22 @@ import {
 } from './lib/pageUtils';
 
 
+function topbarMenuItemStyle(t) {
+  return {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: t.bark,
+    fontSize: 13,
+    fontFamily: bodyFont,
+    padding: '9px 12px',
+    borderBottom: `1px solid ${t.clay}`,
+  };
+}
+
 function Glenwyn({ user }) {
   const [dark, setDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -110,6 +126,7 @@ function Glenwyn({ user }) {
   const [shareCopied, setShareCopied] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [tasksViewOpen, setTasksViewOpen] = useState(false);
+  const [topbarMenuOpen, setTopbarMenuOpen] = useState(false);
   const [titleIconPickerOpen, setTitleIconPickerOpen] = useState(false);
   const searchInputRef = useRef(null);
   const saveTimer = useRef(null);
@@ -280,6 +297,7 @@ function Glenwyn({ user }) {
         setShareOpen(false);
         setShortcutsOpen(false);
         setTasksViewOpen(false);
+        setTopbarMenuOpen(false);
       }
     };
     window.addEventListener('keydown', handler);
@@ -299,6 +317,13 @@ function Glenwyn({ user }) {
     window.addEventListener('click', closeIt);
     return () => window.removeEventListener('click', closeIt);
   }, [templateMenuOpen]);
+
+  useEffect(() => {
+    if (!topbarMenuOpen) return;
+    const closeIt = () => setTopbarMenuOpen(false);
+    window.addEventListener('click', closeIt);
+    return () => window.removeEventListener('click', closeIt);
+  }, [topbarMenuOpen]);
 
   useEffect(() => {
     if (!titleIconPickerOpen) return;
@@ -1578,78 +1603,173 @@ function Glenwyn({ user }) {
                 <span style={{ opacity: 0.4 }}>/</span>
               </span>
             ))}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
               {tasksViewOpen ? '✓ Mis tareas' : activePage ? activePage.title || 'Sin título' : ''}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {!tasksViewOpen && activePage && (
-              <button
-                onClick={() => {
-                  setShareError('');
-                  setShareCopied(false);
-                  setShareOpen(true);
-                }}
-                title="Compartir esta página"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: activePage.shareToken ? t.moss : t.fern,
-                  fontSize: 12.5,
-                  fontFamily: monoFont,
-                  padding: 0,
-                }}
-              >
-                🔗 {activePage.shareToken ? 'compartida' : 'compartir'}
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'relative' }}>
+            {!isNarrow && !tasksViewOpen && activePage && (
+              <>
+                <button
+                  onClick={() => {
+                    setShareError('');
+                    setShareCopied(false);
+                    setShareOpen(true);
+                  }}
+                  title="Compartir esta página"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: activePage.shareToken ? t.moss : t.fern,
+                    fontSize: 12.5,
+                    fontFamily: monoFont,
+                    padding: 0,
+                  }}
+                >
+                  🔗 {activePage.shareToken ? 'compartida' : 'compartir'}
+                </button>
+                <button
+                  onClick={() => exportPageAsMarkdown(activePage)}
+                  title="Exportar a Markdown"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: t.fern,
+                    fontSize: 12.5,
+                    fontFamily: monoFont,
+                    padding: 0,
+                  }}
+                >
+                  ⬇ exportar
+                </button>
+                <button
+                  onClick={() => openHistory(activePage.id)}
+                  title="Ver historial de versiones"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: t.fern,
+                    fontSize: 12.5,
+                    fontFamily: monoFont,
+                    padding: 0,
+                  }}
+                >
+                  ⟲ historial
+                </button>
+                <span style={{ color: t.fern, opacity: 0.7 }}>{countWords(activePage)} palabras</span>
+              </>
             )}
-            {!tasksViewOpen && activePage && (
+
+            {/* En pantallas angostas, compartir/exportar/historial/palabras se juntan en un
+                solo menú — mostrarlos todos sueltos es lo que causaba que se amontonaran y
+                se superpusieran con el indicador de guardado. */}
+            {isNarrow && !tasksViewOpen && activePage && (
               <button
-                onClick={() => exportPageAsMarkdown(activePage)}
-                title="Exportar a Markdown"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTopbarMenuOpen((o) => !o);
+                }}
+                title="Más acciones"
+                aria-label="Más acciones"
+                className="glenwyn-focus"
                 style={{
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   color: t.fern,
-                  fontSize: 12.5,
-                  fontFamily: monoFont,
-                  padding: 0,
+                  fontSize: 18,
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                ⬇ exportar
+                ⋯
               </button>
             )}
-            {!tasksViewOpen && activePage && (
-              <button
-                onClick={() => openHistory(activePage.id)}
-                title="Ver historial de versiones"
+            {isNarrow && topbarMenuOpen && activePage && (
+              <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: t.fern,
-                  fontSize: 12.5,
-                  fontFamily: monoFont,
-                  padding: 0,
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 6,
+                  width: 180,
+                  background: t.canvas,
+                  border: `1px solid ${t.clay}`,
+                  borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  zIndex: 6,
+                  overflow: 'hidden',
                 }}
               >
-                ⟲ historial
-              </button>
+                <button
+                  onClick={() => {
+                    setShareError('');
+                    setShareCopied(false);
+                    setShareOpen(true);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  🔗 {activePage.shareToken ? 'Compartida' : 'Compartir'}
+                </button>
+                <button
+                  onClick={() => {
+                    exportPageAsMarkdown(activePage);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  ⬇ Exportar
+                </button>
+                <button
+                  onClick={() => {
+                    openHistory(activePage.id);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  ⟲ Historial
+                </button>
+                <div style={{ padding: '8px 12px', fontSize: 12, color: t.fern, borderTop: `1px solid ${t.clay}` }}>
+                  {countWords(activePage)} palabras
+                </div>
+              </div>
             )}
-            {!tasksViewOpen && activePage && (
-              <span style={{ color: t.fern, opacity: 0.7 }}>{countWords(activePage)} palabras</span>
+
+            {/* Estado de guardado: texto completo en desktop, un punto de color compacto en
+                mobile (el mensaje de error largo era exactamente lo que se superponía antes). */}
+            {!isNarrow ? (
+              <span
+                style={{
+                  opacity: saveError || saveState !== 'idle' ? 0.8 : 0,
+                  transition: 'opacity 300ms ease',
+                  color: saveError ? t.error : t.fern,
+                }}
+              >
+                {saveError || (saveState === 'saving' ? 'guardando…' : saveState === 'saved' ? 'guardado' : '')}
+              </span>
+            ) : (
+              (saveError || saveState !== 'idle') && (
+                <span
+                  title={saveError || (saveState === 'saving' ? 'Guardando…' : 'Guardado')}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: saveError ? t.error : saveState === 'saving' ? t.sun : t.moss,
+                    flexShrink: 0,
+                  }}
+                />
+              )
             )}
-            <span
-              style={{
-                opacity: saveError || saveState !== 'idle' ? 0.8 : 0,
-                transition: 'opacity 300ms ease',
-                color: saveError ? t.error : t.fern,
-              }}
-            >
-              {saveError || (saveState === 'saving' ? 'guardando…' : saveState === 'saved' ? 'guardado' : '')}
-            </span>
           </div>
         </div>
 
