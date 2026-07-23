@@ -4614,3 +4614,13 @@ function ReadOnlyBlock({ block: b, t }) {
   }
 }
 
+
+export default function App() {
+  // No router dependency — a shared page is just a plain, unauthenticated
+  // read-only view keyed off the URL path, entirely separate from the main app.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/share/')) {
+    const token = window.location.pathname.split('/share/')[1];
+    return <SharedPageView token={token} />;
+  }
+  return <AuthGate>{(user) => <Glenwyn user={user} />}</AuthGate>;
+}
