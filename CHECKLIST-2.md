@@ -21,8 +21,16 @@ Andá a tu proyecto en supabase.com → **SQL Editor** → pegá y ejecutá **en
 
 Después de correr las cuatro, confirmá en el **Table Editor** que ves las tablas `pages` y `page_versions`, y en **Storage** que existe el bucket `glenwyn-images`.
 
-## 3. Configurar Google OAuth
+## 3. Configurar los métodos de login
 
+La pantalla de login ahora ofrece email+contraseña, Google, Facebook, Microsoft, y teléfono (SMS). Cada uno se activa por separado en Supabase — no hace falta configurarlos todos si no los vas a usar, pero los botones van a aparecer igual (y van a fallar con un error si el proveedor no está activado del lado de Supabase).
+
+### Email + contraseña (el más simple, probablemente ya está activo)
+**En Supabase** (Authentication → Providers):
+- [ ] Confirmar que **Email** esté activado (viene así por defecto en un proyecto nuevo)
+- [ ] Si querés que la gente pueda crear cuenta sin confirmar el email primero, en Authentication → Settings desactivá "Confirm email" (más simple para probar; para producción real conviene dejarlo activado)
+
+### Google
 **En Google Cloud Console** (console.cloud.google.com → APIs & Services → Credentials):
 - [ ] Crear un proyecto (si no tenés uno ya para esto)
 - [ ] Configurar la pantalla de consentimiento OAuth (External, nombre "Glenwyn", tu email de contacto)
@@ -32,9 +40,35 @@ Después de correr las cuatro, confirmá en el **Table Editor** que ves las tabl
 - [ ] Copiar el **Client ID** y el **Client Secret**
 
 **En Supabase** (Authentication → Providers):
-- [ ] Activar el proveedor **Google**
-- [ ] Pegar el Client ID y Client Secret
-- [ ] Ir a Authentication → **URL Configuration** y agregar en *Redirect URLs*:
+- [ ] Activar el proveedor **Google**, pegar Client ID y Secret
+
+### Facebook
+**En Facebook Developers** (developers.facebook.com → Mis apps → Crear app → tipo "Consumidor"):
+- [ ] Agregar el producto **Facebook Login**
+- [ ] En Configuración → Básica, copiar **ID de la app** y **Secreto de la app**
+- [ ] En Facebook Login → Configuración, agregar en *URI de redirección de OAuth válidos*: `https://TU_PROYECTO.supabase.co/auth/v1/callback`
+
+**En Supabase** (Authentication → Providers):
+- [ ] Activar el proveedor **Facebook**, pegar App ID y App Secret
+
+### Microsoft (Azure)
+**En Azure Portal** (portal.azure.com → Azure Active Directory → Registros de aplicaciones → Nuevo registro):
+- [ ] Nombre: "Glenwyn"; tipos de cuenta admitidos: el que corresponda a tu caso
+- [ ] En **URI de redirección** (tipo Web) agregar: `https://TU_PROYECTO.supabase.co/auth/v1/callback`
+- [ ] Copiar el **ID de aplicación (cliente)**
+- [ ] En Certificados y secretos → Nuevo secreto de cliente → copiar el **valor** (no el ID) apenas se genera, no se puede ver después
+
+**En Supabase** (Authentication → Providers):
+- [ ] Activar el proveedor **Azure**, pegar Client ID y Client Secret. En "Azure Tenant URL" dejar el valor por defecto salvo que uses un tenant específico
+
+### Teléfono (SMS)
+Este es el único que necesita un servicio de terceros pago para enviar los SMS — Supabase no manda mensajes de texto por sí solo.
+- [ ] Crear una cuenta en un proveedor de SMS soportado (Twilio es el más común — twilio.com)
+- [ ] En Twilio: conseguir un **Account SID**, **Auth Token**, y un número de teléfono habilitado para SMS
+- [ ] En Supabase → Authentication → Providers → **Phone**: activarlo, elegir Twilio como proveedor, y completar esas tres credenciales
+
+**Redirect URLs (aplica a todos los proveedores OAuth de arriba):**
+- [ ] Authentication → **URL Configuration** → agregar en *Redirect URLs*:
   - `http://localhost:5173`
   - tu dominio de Vercel (ej. `https://glenwyn.vercel.app`)
 
@@ -51,7 +85,7 @@ Después de correr las cuatro, confirmá en el **Table Editor** que ves las tabl
 ## 5. Probar en local
 
 - [ ] `npm run dev` → abrir `http://localhost:5173`
-- [ ] Botón "Continuar con Google" → confirmar que el login funciona
+- [ ] Probar el/los método(s) de login que hayas configurado en el paso 3 (email+contraseña, Google, Facebook, Microsoft, o teléfono)
 - [ ] Crear una página, escribir algo, refrescar el navegador → confirmar que persiste
 - [ ] Probar un par de bloques nuevos (tabla, imagen, embed) para asegurarte que todo renderiza bien
 - [ ] Subir una imagen con el botón "subir archivo" → confirmar que aparece en Storage → Supabase
@@ -74,7 +108,8 @@ Después de correr las cuatro, confirmá en el **Table Editor** que ves las tabl
 
 ## Si algo falla
 
-- **Login no redirige / da error de "redirect_uri_mismatch"** → la URL en Google Cloud Console no coincide exactamente con la de Supabase (revisar que no falte o sobre una barra `/` al final)
+- **Login no redirige / da error de "redirect_uri_mismatch"** → la URL en la consola del proveedor (Google/Facebook/Azure) no coincide exactamente con la de Supabase (revisar que no falte o sobre una barra `/` al final)
+- **Un botón de login da error "Unsupported provider" o similar** → ese proveedor todavía no está activado en Supabase → Authentication → Providers (los botones se muestran siempre, aunque el proveedor no esté configurado del lado de Supabase)
 - **La app carga pero no guarda páginas** → revisar la consola del navegador (F12); los errores de guardado y carga ahora quedan logueados ahí con el prefijo `Glenwyn:`
 - **Imágenes no suben** → confirmar que corriste `004_storage.sql` y que el bucket `glenwyn-images` existe en Storage
 - **El link de compartir da 404 en Vercel** → confirmar que `vercel.json` está en la raíz del proyecto y que Vercel lo tomó en el último deploy (puede necesitar un redeploy manual la primera vez)

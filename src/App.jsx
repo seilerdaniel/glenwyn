@@ -1490,7 +1490,7 @@ function Glenwyn({ user }) {
           <button
             className="glenwyn-focus"
             onClick={() => supabase.auth.signOut()}
-            title={user.email}
+            title={user.email || user.phone || 'Tu cuenta'}
             style={{
               width: '100%',
               display: 'flex',
@@ -1512,7 +1512,7 @@ function Glenwyn({ user }) {
             <span style={{ fontSize: 13 }}>⎋</span>
             {sidebarOpen && (
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Cerrar sesión · {user.email}
+                Cerrar sesión · {user.email || user.phone || 'tu cuenta'}
               </span>
             )}
           </button>

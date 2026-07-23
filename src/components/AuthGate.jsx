@@ -6,34 +6,191 @@ const bark = '#2E2A24';
 const fern = '#7C8B6F';
 const moss = '#4A5D45';
 const clay = '#E8E2D3';
+const errorColor = '#994530';
 
-// Gates the app behind Supabase Auth using Google OAuth.
+// Traduce los mensajes de error más comunes de Supabase Auth a algo legible.
+function translateError(message) {
+  const map = {
+    'Invalid login credentials': 'Email o contraseña incorrectos.',
+    'User already registered': 'Ya existe una cuenta con ese email — probá iniciar sesión.',
+    'Password should be at least 6 characters': 'La contraseña tiene que tener al menos 6 caracteres.',
+    'Unable to validate email address: invalid format': 'Ese email no parece válido.',
+    'Signup requires a valid password': 'Ingresá una contraseña.',
+    'Token has expired or is invalid': 'El código venció o no es válido — pedí uno nuevo.',
+  };
+  return map[message] || message || 'Algo salió mal. Probá de nuevo.';
+}
+
+const inputStyle = {
+  width: '100%',
+  border: `1px solid ${clay}`,
+  borderRadius: 8,
+  padding: '10px 12px',
+  fontSize: 14,
+  background: '#fff',
+  color: bark,
+  outline: 'none',
+  fontFamily: 'inherit',
+};
+
+const primaryButtonStyle = (disabled) => ({
+  width: '100%',
+  padding: '10px 16px',
+  borderRadius: 8,
+  border: 'none',
+  background: moss,
+  color: canvas,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: disabled ? 'default' : 'pointer',
+  opacity: disabled ? 0.7 : 1,
+});
+
+const linkButtonStyle = {
+  background: 'none',
+  border: 'none',
+  color: moss,
+  fontSize: 12.5,
+  cursor: 'pointer',
+  padding: 0,
+  textDecoration: 'underline',
+};
+
+const oauthButtonStyle = {
+  flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '9px 10px',
+  borderRadius: 8,
+  border: `1px solid ${clay}`,
+  background: '#fff',
+  color: bark,
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+// Gates the app behind Supabase Auth. Supports email+password (with sign up and
+// password reset), Google/Facebook/Microsoft OAuth, and phone (SMS OTP).
 // Renders children with `user` once there's a signed-in session.
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
+  // signin | signup | forgot | phone | phone-otp | reset-password
+  const [mode, setMode] = useState('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [signingIn, setSigningIn] = useState(false);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      // Supabase redirects back here after a password-reset email link with this event.
+      if (event === 'PASSWORD_RECOVERY') setMode('reset-password');
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const clearFeedback = () => {
     setError('');
-    setSigningIn(true);
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+    setMessage('');
+  };
+
+  const switchMode = (next) => {
+    clearFeedback();
+    setMode(next);
+  };
+
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    if (err) setError(translateError(err.message));
+    setLoading(false);
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const { error: err } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (err) {
+      setError(translateError(err.message));
+    } else {
+      setMessage('Te mandamos un email para confirmar tu cuenta — revisá tu bandeja de entrada.');
+    }
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (err) setError(translateError(err.message));
+    else setMessage('Te mandamos un link para restablecer tu contraseña.');
+    setLoading(false);
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    if (newPassword.length < 6) {
+      setError('La contraseña tiene que tener al menos 6 caracteres.');
+      return;
+    }
+    setLoading(true);
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    if (err) {
+      setError(translateError(err.message));
+    } else {
+      setMessage('Contraseña actualizada. Ya podés seguir usando Glenwyn.');
+    }
+    setLoading(false);
+  };
+
+  const handlePhoneSubmit = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithOtp({ phone });
+    if (err) setError(translateError(err.message));
+    else {
+      setMessage('Te mandamos un código por SMS.');
+      setMode('phone-otp');
+    }
+    setLoading(false);
+  };
+
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const { error: err } = await supabase.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+    if (err) setError(translateError(err.message));
+    setLoading(false);
+  };
+
+  const handleOAuth = async (provider) => {
+    clearFeedback();
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider,
       options: { redirectTo: window.location.origin },
     });
-    if (signInError) {
-      setSigningIn(false);
-      setError('No pudimos abrir el login de Google. Probá de nuevo.');
-    }
-    // On success, the browser redirects to Google — no need to unset signingIn here.
+    if (err) setError(translateError(err.message));
   };
 
   if (session === undefined) {
@@ -44,46 +201,217 @@ export default function AuthGate({ children }) {
     );
   }
 
-  if (!session) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: canvas, fontFamily: 'sans-serif' }}>
-        <div style={{ width: 320, textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 600, color: moss, marginBottom: 6 }}>Glenwyn</div>
-          <div style={{ fontSize: 13, color: fern, marginBottom: 24 }}>
-            Un espacio de trabajo tranquilo, esperándote.
-          </div>
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={signingIn}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              padding: '10px 16px',
-              borderRadius: 8,
-              border: `1px solid ${clay}`,
-              background: '#fff',
-              color: bark,
-              fontSize: 14,
-              cursor: signingIn ? 'default' : 'pointer',
-              opacity: signingIn ? 0.7 : 1,
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18">
-              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z" />
-              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z" />
-              <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03z" />
-              <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z" />
-            </svg>
-            {signingIn ? 'Abriendo Google…' : 'Continuar con Google'}
-          </button>
-          {error && <div style={{ color: '#B5533C', fontSize: 12, marginTop: 10 }}>{error}</div>}
-        </div>
-      </div>
-    );
+  // Signed in, and not in the middle of a password-reset flow triggered from an email link.
+  if (session && mode !== 'reset-password') {
+    return children(session.user);
   }
 
-  return children(session.user);
+  const Feedback = () => (
+    <>
+      {error && <div style={{ color: errorColor, fontSize: 12.5, marginTop: 12 }}>{error}</div>}
+      {message && <div style={{ color: moss, fontSize: 12.5, marginTop: 12 }}>{message}</div>}
+    </>
+  );
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: canvas, fontFamily: 'sans-serif', padding: 20 }}>
+      <div style={{ width: 360, maxWidth: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 22, fontWeight: 600, color: moss, marginBottom: 6 }}>Glenwyn</div>
+          <div style={{ fontSize: 13, color: fern }}>Un espacio de trabajo tranquilo, esperándote.</div>
+        </div>
+
+        {/* ---- Restablecer contraseña (llegás acá desde el link del email) ---- */}
+        {mode === 'reset-password' && (
+          <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 13, color: bark, marginBottom: 2 }}>Elegí una contraseña nueva</div>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Nueva contraseña"
+              autoFocus
+              style={inputStyle}
+            />
+            <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+              {loading ? 'Guardando…' : 'Guardar contraseña'}
+            </button>
+            <Feedback />
+          </form>
+        )}
+
+        {/* ---- Iniciar sesión ---- */}
+        {mode === 'signin' && (
+          <>
+            <form onSubmit={handleSignIn} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={inputStyle} required />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" style={inputStyle} required />
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => switchMode('forgot')} style={linkButtonStyle}>
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+              <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+                {loading ? 'Ingresando…' : 'Iniciar sesión'}
+              </button>
+            </form>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
+              <div style={{ flex: 1, height: 1, background: clay }} />
+              <span style={{ fontSize: 11.5, color: fern }}>o continuá con</span>
+              <div style={{ flex: 1, height: 1, background: clay }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => handleOAuth('google')} title="Continuar con Google" style={oauthButtonStyle}>
+                <GoogleIcon />
+              </button>
+              <button onClick={() => handleOAuth('facebook')} title="Continuar con Facebook" style={oauthButtonStyle}>
+                <FacebookIcon />
+              </button>
+              <button onClick={() => handleOAuth('azure')} title="Continuar con Microsoft" style={oauthButtonStyle}>
+                <MicrosoftIcon />
+              </button>
+            </div>
+
+            <button
+              onClick={() => switchMode('phone')}
+              style={{ ...oauthButtonStyle, width: '100%', marginTop: 8 }}
+            >
+              📱 Continuar con número de teléfono
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: fern }}>
+              ¿No tenés cuenta?{' '}
+              <button onClick={() => switchMode('signup')} style={linkButtonStyle}>
+                Creá una
+              </button>
+            </div>
+
+            <Feedback />
+          </>
+        )}
+
+        {/* ---- Crear cuenta ---- */}
+        {mode === 'signup' && (
+          <>
+            <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={inputStyle} required />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña (mínimo 6 caracteres)" style={inputStyle} required minLength={6} />
+              <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+                {loading ? 'Creando cuenta…' : 'Crear cuenta'}
+              </button>
+            </form>
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: fern }}>
+              ¿Ya tenés cuenta?{' '}
+              <button onClick={() => switchMode('signin')} style={linkButtonStyle}>
+                Iniciá sesión
+              </button>
+            </div>
+            <Feedback />
+          </>
+        )}
+
+        {/* ---- Olvidé mi contraseña ---- */}
+        {mode === 'forgot' && (
+          <>
+            <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, color: fern, marginBottom: 2 }}>
+                Ingresá tu email y te mandamos un link para restablecer tu contraseña.
+              </div>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={inputStyle} required />
+              <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+                {loading ? 'Enviando…' : 'Mandar link'}
+              </button>
+            </form>
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: fern }}>
+              <button onClick={() => switchMode('signin')} style={linkButtonStyle}>
+                Volver a iniciar sesión
+              </button>
+            </div>
+            <Feedback />
+          </>
+        )}
+
+        {/* ---- Teléfono: pedir código ---- */}
+        {mode === 'phone' && (
+          <>
+            <form onSubmit={handlePhoneSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, color: fern, marginBottom: 2 }}>
+                Ingresá tu número con código de país (ej. +54 9 11 1234 5678).
+              </div>
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+54 9 11 1234 5678" style={inputStyle} required />
+              <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+                {loading ? 'Enviando…' : 'Mandar código por SMS'}
+              </button>
+            </form>
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: fern }}>
+              <button onClick={() => switchMode('signin')} style={linkButtonStyle}>
+                Volver a iniciar sesión
+              </button>
+            </div>
+            <Feedback />
+          </>
+        )}
+
+        {/* ---- Teléfono: verificar código ---- */}
+        {mode === 'phone-otp' && (
+          <>
+            <form onSubmit={handleOtpSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, color: fern, marginBottom: 2 }}>Ingresá el código de 6 dígitos que te mandamos por SMS.</div>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="123456"
+                style={{ ...inputStyle, textAlign: 'center', letterSpacing: 4, fontSize: 18 }}
+                maxLength={6}
+                required
+              />
+              <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
+                {loading ? 'Verificando…' : 'Verificar código'}
+              </button>
+            </form>
+            <div style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: fern }}>
+              <button onClick={() => switchMode('phone')} style={linkButtonStyle}>
+                Cambiar número
+              </button>
+            </div>
+            <Feedback />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
+function FacebookIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24">
+      <path fill="#1877F2" d="M24 12.07C24 5.41 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.79-4.7 4.53-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.5h-2.8V24C19.62 23.1 24 18.1 24 12.07z" />
+    </svg>
+  );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 21 21">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
+  );
 }
