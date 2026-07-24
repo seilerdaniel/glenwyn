@@ -114,6 +114,7 @@ function Glenwyn({ user }) {
   const [shareError, setShareError] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tasksViewOpen, setTasksViewOpen] = useState(false);
   const [orphansViewOpen, setOrphansViewOpen] = useState(false);
   const [topbarMenuOpen, setTopbarMenuOpen] = useState(false);
@@ -332,6 +333,7 @@ function Glenwyn({ user }) {
         setOrphansViewOpen(false);
         setZenMode(false);
         setDeepWorkActive(false);
+        setSettingsOpen(false);
       }
     };
     window.addEventListener('keydown', handler);
@@ -1999,6 +2001,28 @@ function Glenwyn({ user }) {
             <span style={{ fontSize: 14 }}>📖</span>
             {sidebarOpen && <span>Guía de uso</span>}
           </a>
+          <button
+            className="glenwyn-focus"
+            onClick={() => setSettingsOpen(true)}
+            title="Ajustes"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: sidebarOpen ? 'flex-start' : 'center',
+              gap: 8,
+              padding: '7px 8px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: t.fern,
+              fontSize: 13.5,
+              borderRadius: 7,
+            }}
+          >
+            <span style={{ fontSize: 14 }}>⚙</span>
+            {sidebarOpen && <span>Ajustes</span>}
+          </button>
           <div style={{ position: 'relative' }}>
             <button
               className="glenwyn-focus"
@@ -3086,6 +3110,105 @@ function Glenwyn({ user }) {
               </button>
             )}
             {shareError && <div style={{ fontSize: 12, color: t.error, marginTop: 10 }}>{shareError}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Ajustes ---- */}
+      {settingsOpen && (
+        <div
+          onClick={() => setSettingsOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(20,20,15,0.35)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: '10vh',
+            zIndex: 10,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Ajustes"
+            style={{
+              width: 440,
+              maxWidth: '90vw',
+              maxHeight: '78vh',
+              overflowY: 'auto',
+              background: t.canvas,
+              border: `1px solid ${t.clay}`,
+              borderRadius: 10,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+              padding: '20px 22px',
+            }}
+          >
+            <div style={{ fontFamily: displayFont, fontSize: 19, fontWeight: 600, color: t.bark, marginBottom: 18 }}>
+              Ajustes
+            </div>
+
+            {/* Cuenta */}
+            <div style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.fern, marginBottom: 8 }}>
+              Cuenta
+            </div>
+            <div style={{ fontSize: 13.5, color: t.bark, marginBottom: 4 }}>{user.email || user.phone || 'Tu cuenta'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.fern, marginBottom: 10 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: profile?.plan === 'free' || !profile ? t.fern : t.sun }} />
+              Plan {profile?.plan || 'free'}
+            </div>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="glenwyn-focus"
+              style={{ background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '6px 12px', fontSize: 12.5, color: t.error, cursor: 'pointer', marginBottom: 22 }}
+            >
+              Cerrar sesión
+            </button>
+
+            {/* Apariencia */}
+            <div style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.fern, marginBottom: 8, borderTop: `1px solid ${t.clay}`, paddingTop: 18 }}>
+              Apariencia
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+              <span style={{ fontSize: 13.5, color: t.bark }}>Modo {dark ? 'oscuro' : 'claro'}</span>
+              <button
+                onClick={() => setDark((d) => !d)}
+                className="glenwyn-focus"
+                style={{ background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '5px 12px', fontSize: 12.5, color: t.fern, cursor: 'pointer' }}
+              >
+                {dark ? '☀ Cambiar a claro' : '☾ Cambiar a oscuro'}
+              </button>
+            </div>
+
+            {/* Datos y privacidad */}
+            <div style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.fern, marginBottom: 8, borderTop: `1px solid ${t.clay}`, paddingTop: 18 }}>
+              Datos y privacidad
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 22, fontSize: 13.5 }}>
+              <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" style={{ color: t.moss }}>Política de privacidad</a>
+              <a href="/terminos.html" target="_blank" rel="noopener noreferrer" style={{ color: t.moss }}>Términos de servicio</a>
+              <a href="/cookies.html" target="_blank" rel="noopener noreferrer" style={{ color: t.moss }}>Política de cookies</a>
+            </div>
+
+            {/* Ayuda */}
+            <div style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.fern, marginBottom: 8, borderTop: `1px solid ${t.clay}`, paddingTop: 18 }}>
+              Ayuda
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
+              <a href="/guia.html" target="_blank" rel="noopener noreferrer" style={{ color: t.moss }}>Guía de uso</a>
+              <button
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setShortcutsOpen(true);
+                }}
+                className="glenwyn-focus"
+                style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', color: t.moss, fontSize: 13.5, cursor: 'pointer' }}
+              >
+                Atajos de teclado
+              </button>
+            </div>
           </div>
         </div>
       )}

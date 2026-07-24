@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/((?!guia\\.html).*)", "destination": "/index.html" }
+    { "source": "/((?!guia\\.html|privacidad\\.html|terminos\\.html|cookies\\.html).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

@@ -398,6 +398,14 @@ export default function AuthGate({ children }) {
               </button>
             </div>
 
+            <div style={{ textAlign: 'center', marginTop: 14, fontSize: 10.5, color: fern }}>
+              <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" style={{ color: fern }}>Privacidad</a>
+              {' · '}
+              <a href="/terminos.html" target="_blank" rel="noopener noreferrer" style={{ color: fern }}>Términos</a>
+              {' · '}
+              <a href="/cookies.html" target="_blank" rel="noopener noreferrer" style={{ color: fern }}>Cookies</a>
+            </div>
+
             <Feedback />
           </>
         )}
@@ -428,6 +436,11 @@ export default function AuthGate({ children }) {
               <button onClick={() => switchMode('signin')} style={linkButtonStyle}>
                 Iniciá sesión
               </button>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: fern }}>
+              Al crear una cuenta aceptás nuestros{' '}
+              <a href="/terminos.html" target="_blank" rel="noopener noreferrer" style={{ color: moss }}>Términos de servicio</a> y nuestra{' '}
+              <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" style={{ color: moss }}>Política de privacidad</a>.
             </div>
             <Feedback />
           </>

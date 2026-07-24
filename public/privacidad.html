@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de privacidad — Glenwyn</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --canvas: #F6F3EC; --canvas-alt: #EFEAE0; --bark: #2E2A24; --fern: #7C8B6F;
+    --moss: #4A5D45; --clay: #E8E2D3; --sun: #C9A876;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #1C1F1A; --canvas-alt: #20241D; --bark: #E8E4D9; --fern: #8FA085;
+      --moss: #6B8060; --clay: #2E332A; --sun: #D4B483;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--canvas); color: var(--bark);
+    font-family: 'Public Sans', -apple-system, sans-serif; line-height: 1.7;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 60px 28px 100px; }
+  header { margin-bottom: 40px; }
+  .wordmark { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--moss); text-decoration: none; }
+  nav { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+  nav a { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--fern); text-decoration: none; border-bottom: 1px dotted var(--fern); }
+  nav a.current { color: var(--bark); border-bottom: 1px solid var(--moss); }
+  h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 32px; margin: 0 0 6px; }
+  .updated { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--fern); margin-bottom: 36px; }
+  h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; margin: 32px 0 10px; }
+  p, li { font-size: 15px; }
+  ul { padding-left: 20px; }
+  .notice {
+    background: var(--canvas-alt); border: 1px solid var(--clay); border-radius: 10px;
+    padding: 16px 18px; font-size: 13.5px; color: var(--fern); margin: 28px 0;
+  }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--clay); padding: 1px 5px; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; color: var(--fern); padding: 6px 8px; border-bottom: 1px solid var(--clay); }
+  td { padding: 8px; border-bottom: 1px solid var(--clay); vertical-align: top; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a href="/" class="wordmark">Glenwyn</a>
+    <nav>
+      <a href="/privacidad.html" class="current">Privacidad</a>
+      <a href="/terminos.html">Términos de servicio</a>
+      <a href="/cookies.html">Cookies</a>
+    </nav>
+  </header>
+
+  <h1>Política de privacidad</h1>
+  <div class="updated">Última actualización: julio de 2026</div>
+
+  <div class="notice">
+    <strong>Aviso importante:</strong> este documento es un punto de partida razonable, redactado para explicar con claridad qué hace Glenwyn con tus datos — no reemplaza una revisión legal profesional. Si Glenwyn empieza a cobrar de verdad o a tener usuarios en la Unión Europea, conviene revisar este texto con un abogado (aplicaría el RGPD, con requisitos más estrictos que los de acá).
+  </div>
+
+  <h2>Qué información recolectamos</h2>
+  <table>
+    <tr><th>Dato</th><th>Cuándo</th></tr>
+    <tr><td>Email o número de teléfono</td><td>Al crear tu cuenta, según el método de login que elijas</td></tr>
+    <tr><td>Nombre y foto de perfil</td><td>Si iniciás sesión con Google, Facebook, o Microsoft (lo que ese proveedor comparta)</td></tr>
+    <tr><td>El contenido que escribís</td><td>Páginas, bloques, tareas, bases de datos — todo lo que creás dentro de Glenwyn</td></tr>
+    <tr><td>Preferencias de uso</td><td>Modo oscuro/claro, cómo ordenás tus páginas — guardado localmente en tu navegador</td></tr>
+    <tr><td>Información de pago</td><td>Si en el futuro elegís un plan pago — procesada directamente por Stripe, Glenwyn nunca ve tu número de tarjeta</td></tr>
+  </table>
+
+  <h2>Cómo usamos esta información</h2>
+  <ul>
+    <li>Para que la app funcione: guardar y mostrar tu contenido, mantener tu sesión iniciada</li>
+    <li>Para identificar tu plan (Free/Plus/Business) y aplicar los límites o beneficios que correspondan</li>
+    <li>Nunca vendemos tus datos a terceros, ni los usamos para publicidad</li>
+    <li>Nadie en el equipo de Glenwyn lee el contenido de tus notas como práctica habitual — es tuyo</li>
+  </ul>
+
+  <h2>Con quién se comparte</h2>
+  <p>Glenwyn funciona sobre estos servicios de infraestructura, cada uno con su propia política de privacidad:</p>
+  <ul>
+    <li><strong>Supabase</strong> — base de datos, autenticación, y almacenamiento de archivos</li>
+    <li><strong>Vercel</strong> — hosting del sitio</li>
+    <li><strong>Google / Facebook / Microsoft</strong> — si elegís iniciar sesión con alguno de ellos</li>
+    <li><strong>Twilio</strong> (a través de Supabase) — si iniciás sesión por SMS</li>
+    <li><strong>Stripe</strong> — si en el futuro contratás un plan pago, procesa el pago directamente</li>
+  </ul>
+
+  <h2>Tus derechos</h2>
+  <ul>
+    <li><strong>Acceder</strong> a todo tu contenido en cualquier momento, dentro de la app</li>
+    <li><strong>Exportar</strong> tus páginas a Markdown</li>
+    <li><strong>Eliminar</strong> tu cuenta y todos tus datos — escribinos si necesitás ayuda con esto</li>
+  </ul>
+
+  <h2>Seguridad</h2>
+  <p>Tus datos están protegidos por Row Level Security en la base de datos — técnicamente, ningún otro usuario puede leer tu contenido, ni siquiera si hubiera un error en el código de la app. Las contraseñas nunca se guardan en texto plano.</p>
+
+  <h2>Cambios a esta política</h2>
+  <p>Si esta política cambia de forma importante, te lo vamos a hacer saber dentro de la app.</p>
+
+  <h2>Contacto</h2>
+  <p>Para cualquier pregunta sobre tu privacidad o tus datos, escribinos a través de los canales de contacto de Glenwyn.</p>
+</div>
+</body>
+</html>

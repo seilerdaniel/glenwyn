@@ -681,6 +681,16 @@ Ver `DISENO_MONETIZACION.md` para el diseño completo.
 
 ---
 
+## v0.53 — Páginas legales + panel de Ajustes
+
+- **3 páginas legales nuevas**, servidas estáticas (excluidas del rewrite de la SPA, mismo mecanismo que ya usaba `guia.html`): `privacidad.html`, `terminos.html`, `cookies.html` — con navegación cruzada entre las tres y la misma identidad visual del resto de Glenwyn. **Son un punto de partida razonable, no una revisión legal real** — antes de cobrar dinero de verdad o tener usuarios en la UE, conviene que las revise un abogado
+- Enlazadas desde tres lugares: el panel de Ajustes nuevo, la pantalla de login (pie de página), y el formulario de crear cuenta ("al crear una cuenta aceptás...")
+- **Panel de Ajustes** (⚙ en el sidebar): cuenta (email/teléfono + plan actual), modo claro/oscuro, los links legales, y accesos directos a la guía de uso y los atajos de teclado — todo consolidado en un solo lugar, como en cualquier app
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 
