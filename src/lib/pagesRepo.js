@@ -75,6 +75,8 @@ function rowToPage(row) {
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : null,
     pinned: !!row.pinned,
     shareToken: row.share_token ?? null,
+    databaseId: row.database_id ?? null,
+    properties: row.properties ?? null,
   };
 }
 
@@ -90,5 +92,7 @@ function pageToRow(page, userId) {
     is_archived: !!page.isArchived,
     archived_at: page.archivedAt ? new Date(page.archivedAt).toISOString() : null,
     pinned: !!page.pinned,
+    database_id: page.databaseId ?? null,
+    properties: page.properties ?? null,
   };
 }

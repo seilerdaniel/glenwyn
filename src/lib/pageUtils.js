@@ -1,6 +1,9 @@
 // Pure logic helpers for pages/blocks — no React, no JSX, no hooks.
 // Extracted from App.jsx so this logic can be read and reasoned about on its own.
 
+// Genera un UUID real (no un string corto cualquiera) — necesario porque este mismo
+// id termina en la columna `pages.id`, que en Postgres es de tipo `uuid` estricto.
+// Un string corto tipo "mnh2lfhl" lo rechaza con "invalid input syntax for type uuid".
 export const uid = () => crypto.randomUUID();
 
 export const emptyPage = (title = 'Sin título', parentId = null, order = 0) => ({
@@ -379,6 +382,224 @@ export function getBacklinks(pages, pageId) {
     });
   });
 }
+
+// Backlink count for every page at once, in a single pass — used to highlight
+// "hub" pages (the ones most referenced across the workspace) in the sidebar.
+// Calling getBacklinks() per-page in a loop would be O(n²) for no reason; this
+// walks every page's blocks exactly once and tallies as it goes.
+export function getBacklinkCounts(pages) {
+  const counts = {};
+  for (const p of pages) {
+    if (p.isArchived) continue;
+    const targets = new Set(); // a page mentioning another twice still counts once
+    for (const b of p.blocks) {
+      if (b.type === 'page-link' && b.linkedPageId && b.linkedPageId !== p.id) {
+        targets.add(b.linkedPageId);
+      } else if (b.type === 'text' && hasMentions(b.content)) {
+        for (const seg of parseMentions(b.content, pages)) {
+          if (seg.type === 'mention' && seg.pageId && seg.pageId !== p.id) targets.add(seg.pageId);
+        }
+      }
+    }
+    for (const targetId of targets) {
+      counts[targetId] = (counts[targetId] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+// Pages that nobody links to or mentions — the most common failure mode of any
+// second brain (you accumulate notes and can't find half of them because
+// they're not connected to anything). Not a call to action to connect
+// everything; just visibility into which pages currently have zero incoming
+// connections, so you can decide yourself whether to link, archive, or leave
+// them as intentionally standalone.
+export function getOrphanPages(pages) {
+  const counts = getBacklinkCounts(pages);
+  return pages.filter((p) => !p.isArchived && !counts[p.id]);
+}
+
+// Idea #17 — a rough Zettelkasten-style maturity read on a page, purely from
+// signals that already exist (no extra field to maintain by hand): a page with
+// no incoming connections yet is "fugaz"; once something links to it but it's
+// still short, it's "en proceso"; connected AND substantial is "permanente".
+// A quick visual sense of what's still a draft vs. what's actually settled.
+const MATURITY_WORD_THRESHOLD = 40;
+
+export function getPageMaturity(page, backlinkCount) {
+  if (!backlinkCount) return 'fugaz';
+  if (countWords(page) < MATURITY_WORD_THRESHOLD) return 'en_proceso';
+  return 'permanente';
+}
+
+// Idea #33 — how long since a page was last touched, in coarse buckets. Meant
+// to drive a *warm* visual treatment (a slightly muted, aged look — like an old
+// photo) rather than a clinical "last edited" timestamp or a staleness warning.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Small, shared, and used from more than one component (the extract-to-page
+// shortcut and the mini neighbor map) — pure enough to live here rather than
+// be duplicated in both places.
+export function truncateLabel(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+export function getPageAge(page, now = Date.now()) {
+  const lastTouched = page.updatedAt || page.createdAt || now;
+  const daysSince = (now - lastTouched) / DAY_MS;
+  if (daysSince > 90) return 'old';
+  if (daysSince > 30) return 'aging';
+  return 'recent';
+}
+
+// The pages `pageId` links out TO — the mirror image of getBacklinks (which only
+// looks at incoming links). Powers the local neighbor map at the foot of a page,
+// which needs both directions to be useful, not just "who mentions me".
+export function getOutgoingLinks(pages, pageId) {
+  const page = pages.find((p) => p.id === pageId);
+  if (!page) return [];
+  const targetIds = new Set();
+  for (const b of page.blocks) {
+    if (b.type === 'page-link' && b.linkedPageId && b.linkedPageId !== pageId) {
+      targetIds.add(b.linkedPageId);
+    } else if (b.type === 'text' && hasMentions(b.content)) {
+      for (const seg of parseMentions(b.content, pages)) {
+        if (seg.type === 'mention' && seg.pageId && seg.pageId !== pageId) targetIds.add(seg.pageId);
+      }
+    }
+  }
+  return pages.filter((p) => targetIds.has(p.id) && !p.isArchived);
+}
+
+// ---- Bases de datos (Fase A: propiedades básicas, una sola vista de tabla) ----
+// Ver el documento de diseño para el porqué: un "registro" es simplemente una
+// página normal con parentId apuntando a la página-base-de-datos y databaseId
+// apuntando al esquema — reutiliza toda la jerarquía/papelera/historial existente
+// en vez de duplicar esa infraestructura para un sistema paralelo.
+
+export const PROPERTY_TYPES = [
+  { type: 'text', label: 'Texto' },
+  { type: 'number', label: 'Número' },
+  { type: 'select', label: 'Selección' },
+  { type: 'date', label: 'Fecha' },
+  { type: 'checkbox', label: 'Casilla' },
+  { type: 'relation', label: 'Relación' },
+  { type: 'rollup', label: 'Rollup' },
+];
+
+export const ROLLUP_AGGREGATIONS = [
+  { type: 'count', label: 'Contar' },
+  { type: 'sum', label: 'Sumar' },
+  { type: 'average', label: 'Promediar' },
+];
+
+export function newProperty(type = 'text') {
+  return {
+    id: uid(),
+    name: 'Nueva propiedad',
+    type,
+    options: type === 'select' ? ['Opción 1'] : undefined,
+    relatedDatabaseId: undefined, // 'relation' only — which database it points to
+    relationPropertyId: undefined, // 'rollup' only — which of THIS database's relation properties to read
+    targetPropertyId: undefined, // 'rollup' only — which property, on the related records, to aggregate
+    aggregation: type === 'rollup' ? 'count' : undefined,
+    defaultValue: undefined, // Fase D — applied automatically to every new record (relation/rollup can't have one)
+  };
+}
+
+// Fase D "plantillas para registros nuevos", the simple version: rather than a
+// separate named-template system, every property can carry a default value that
+// gets applied automatically whenever a new record is created — a "Prioridad"
+// select defaulting to "Media", a checkbox defaulting to checked, etc.
+export function getDefaultPropertyValues(properties) {
+  const values = {};
+  for (const prop of properties) {
+    if (prop.defaultValue === undefined || prop.defaultValue === '') continue;
+    values[prop.id] =
+      prop.type === 'date' && prop.defaultValue === '__today__'
+        ? new Date().toISOString().slice(0, 10)
+        : prop.defaultValue;
+  }
+  return values;
+}
+
+// Every page that's a record of the given database — i.e. every row a table
+// view needs to render. Archived records are excluded, same convention as the
+// rest of the app (they live in the trash, not in any live view).
+export function getDatabaseRecords(pages, databaseId) {
+  return pages
+    .filter((p) => p.databaseId === databaseId && !p.isArchived)
+    .sort((a, b) => a.order - b.order);
+}
+
+// Reads a record's value for a given property id, with a type-appropriate
+// default when the record has never had that property set (e.g. a property
+// added to the schema after the record already existed).
+export function getPropertyValue(record, propertyId, propertyType) {
+  const value = record.properties ? record.properties[propertyId] : undefined;
+  if (value !== undefined) return value;
+  if (propertyType === 'checkbox') return false;
+  if (propertyType === 'relation') return [];
+  return '';
+}
+
+// The actual related record pages for a 'relation' property's current value
+// (an array of page ids) — archived records are silently dropped, same as
+// everywhere else a stale reference could otherwise resurrect a trashed page.
+export function getRelatedRecords(pages, record, relationPropertyId) {
+  const ids = getPropertyValue(record, relationPropertyId, 'relation') || [];
+  return ids.map((id) => pages.find((p) => p.id === id)).filter((p) => p && !p.isArchived);
+}
+
+// Resolves any property's *displayed* value for a record — plain properties
+// just read their stored value, but a 'rollup' has to walk its relation and
+// aggregate a property on the *related* database, which might itself be
+// another rollup. `visited` guards against A→B→A cycles (Fase C's one real
+// risk, flagged from the original design doc) — a cycle resolves to null
+// with a flag rather than recursing forever.
+export function resolvePropertyValue(pages, databases, record, property, database, visited = new Set()) {
+  if (property.type !== 'rollup') {
+    return { value: getPropertyValue(record, property.id, property.type), error: null };
+  }
+
+  const cycleKey = `${database.id}:${property.id}:${record.id}`;
+  if (visited.has(cycleKey)) return { value: null, error: 'ciclo' };
+  visited.add(cycleKey);
+
+  const relationProp = database.properties.find((p) => p.id === property.relationPropertyId);
+  if (!relationProp) return { value: null, error: 'sin configurar' };
+  const relatedDatabase = databases.find((d) => d.id === relationProp.relatedDatabaseId);
+  if (!relatedDatabase) return { value: null, error: 'sin configurar' };
+  const targetProp = relatedDatabase.properties.find((p) => p.id === property.targetPropertyId);
+  if (!targetProp) return { value: null, error: 'sin configurar' };
+
+  const relatedRecords = getRelatedRecords(pages, record, relationProp.id);
+
+  if (property.aggregation === 'count') {
+    return { value: relatedRecords.length, error: null };
+  }
+
+  const resolved = relatedRecords.map((r) =>
+    resolvePropertyValue(pages, databases, r, targetProp, relatedDatabase, visited)
+  );
+  // If any recursive resolution hit a cycle (or missing config), surface that
+  // here too instead of quietly treating it as zero — Number(null) === 0 in
+  // JS, so without this check a real cycle would silently compute as "0"
+  // instead of being visible as an error.
+  const firstError = resolved.find((r) => r.error);
+  if (firstError) return { value: null, error: firstError.error };
+
+  const numbers = resolved.map((r) => r.value).map(Number).filter((n) => !Number.isNaN(n));
+
+  if (property.aggregation === 'sum') {
+    return { value: numbers.reduce((a, b) => a + b, 0), error: null };
+  }
+  if (property.aggregation === 'average') {
+    return { value: numbers.length ? numbers.reduce((a, b) => a + b, 0) / numbers.length : 0, error: null };
+  }
+  return { value: null, error: null };
+}
+
 
 // Every todo block that has a due date, across every live page — the data behind
 // the "Mis tareas" global view. Undated todos aren't included (same idea as

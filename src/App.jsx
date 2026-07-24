@@ -1,41 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { storage } from './lib/storage';
 import { loadPages, savePages, enableSharing, disableSharing, rotateSharing } from './lib/pagesRepo';
+import { loadDatabases, createDatabase, updateDatabaseProperties } from './lib/databasesRepo';
+import { loadProfile } from './lib/profileRepo';
 import { saveVersion, listVersions } from './lib/versionsRepo';
 import { uploadImage, deleteUploadedImagesForBlocks } from './lib/storageRepo';
-import { fetchSharedPage } from './lib/sharedPageRepo';
 import { supabase } from './lib/supabaseClient';
 import AuthGate from './components/AuthGate';
-
-// ---- Design tokens ----
-const tokens = {
-  light: {
-    canvas: '#F6F3EC',
-    canvasAlt: '#EFEAE0',
-    bark: '#2E2A24',
-    fern: '#7C8B6F',
-    moss: '#4A5D45',
-    clay: '#E8E2D3',
-    sun: '#C9A876',
-    sidebarBg: '#EFEAE0',
-    error: '#994530',
-  },
-  dark: {
-    canvas: '#1C1F1A',
-    canvasAlt: '#20241D',
-    bark: '#E8E4D9',
-    fern: '#8FA085',
-    moss: '#6B8060',
-    clay: '#2E332A',
-    sun: '#D4B483',
-    sidebarBg: '#181B15',
-    error: '#E08A65',
-  },
-};
-
-const displayFont = "'Fraunces', Georgia, serif";
-const bodyFont = "'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const monoFont = "'JetBrains Mono', ui-monospace, monospace";
+import { tokens, displayFont, bodyFont, monoFont } from './theme';
+import SharedPageView from './components/SharedPageView';
+import { DatabaseView } from './components/DatabaseViews';
+import { TasksView, OrphanPagesView, MiniGraphMap } from './components/SecondBrainViews';
+import { PageRow, IconPicker, EmptyState } from './components/SidebarViews';
+import Block from './components/Block';
 
 import {
   uid,
@@ -44,10 +21,6 @@ import {
   getDescendantIds,
   TRASH_RETENTION_MS,
   VERSION_SNAPSHOT_INTERVAL_MS,
-  SLASH_COMMANDS,
-  isHttpUrl,
-  parseEmbedUrl,
-  detectMarkdownShortcut,
   numberedListPosition,
   countWords,
   pageMatchesQuery,
@@ -56,11 +29,17 @@ import {
   buildVisibleTree,
   getAncestorChain,
   getBacklinks,
-  hasMentions,
-  parseMentions,
+  getBacklinkCounts,
+  getOrphanPages,
+  getPageMaturity,
+  getPageAge,
+  truncateLabel,
+  getOutgoingLinks,
+  newProperty,
+  getDatabaseRecords,
+  getDefaultPropertyValues,
   getAllTasks,
   computeNextDueDate,
-  parseNaturalDateFromText,
   movePage,
   movePageToRootEnd,
 } from './lib/pageUtils';
@@ -104,6 +83,9 @@ function Glenwyn({ user }) {
     if (isNarrow) setSidebarOpen(false);
   }, [isNarrow]);
   const [pages, setPages] = useState([]);
+  const [databases, setDatabases] = useState([]);
+  const [profile, setProfile] = useState(null); // { userId, plan, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd }
+  const [databaseViewModes, setDatabaseViewModes] = useState({}); // databaseId -> 'table' | 'board' | 'calendar'
   const [activeId, setActiveId] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved
@@ -112,6 +94,13 @@ function Glenwyn({ user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState({});
   const [sortMode, setSortMode] = useState('manual'); // 'manual' | 'alphabetical' | 'updated'
+  const [inboxPageId, setInboxPageId] = useState(null);
+  const [navigationTrail, setNavigationTrail] = useState([]); // idea #36 — last few pages visited this session, most recent first
+  const [zenMode, setZenMode] = useState(false); // idea #42, "Modo Zen" — hides sidebar + top bar chrome while writing
+  const [deepWorkActive, setDeepWorkActive] = useState(false); // Modo Deep Work — same hiding treatment, but time-boxed
+  const [deepWorkSecondsLeft, setDeepWorkSecondsLeft] = useState(0);
+  const [deepWorkMenuOpen, setDeepWorkMenuOpen] = useState(false);
+  const hideChrome = zenMode || deepWorkActive; // either mode hides the sidebar/top bar the same way
   const [dragId, setDragId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // { id, position: 'before'|'after'|'inside' }
   const [trashOpen, setTrashOpen] = useState(false);
@@ -126,6 +115,7 @@ function Glenwyn({ user }) {
   const [shareCopied, setShareCopied] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [tasksViewOpen, setTasksViewOpen] = useState(false);
+  const [orphansViewOpen, setOrphansViewOpen] = useState(false);
   const [topbarMenuOpen, setTopbarMenuOpen] = useState(false);
   const [titleIconPickerOpen, setTitleIconPickerOpen] = useState(false);
   const searchInputRef = useRef(null);
@@ -134,6 +124,7 @@ function Glenwyn({ user }) {
   const blockRefs = useRef({}); // blockId -> focusable DOM node, used to focus the previous block after a delete
   const pagesRef = useRef(pages); // always holds the latest `pages`, so a queued retry never saves stale data
   const activeIdRef = useRef(activeId); // same idea, for knowing which page to auto-snapshot
+  const inboxPageIdRef = useRef(null); // same idea again — the global shortcut effect below only runs once
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
   const lastVersionAtRef = useRef({}); // pageId -> timestamp of the last snapshot taken this session
@@ -145,6 +136,10 @@ function Glenwyn({ user }) {
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  useEffect(() => {
+    inboxPageIdRef.current = inboxPageId;
+  }, [inboxPageId]);
 
   const registerBlockRef = (blockId) => (el) => {
     if (el) blockRefs.current[blockId] = el;
@@ -158,9 +153,11 @@ function Glenwyn({ user }) {
   useEffect(() => {
     (async () => {
       try {
-        const [loadedPagesResult, prefsResult] = await Promise.allSettled([
+        const [loadedPagesResult, prefsResult, databasesResult, profileResult] = await Promise.allSettled([
           loadPages(),
           storage.get('glenwyn:prefs'),
+          loadDatabases(),
+          loadProfile(),
         ]);
 
         let loadedPages =
@@ -188,9 +185,20 @@ function Glenwyn({ user }) {
         });
         setPages(loadedPages);
         setActiveId((loadedPages.find((p) => !p.isArchived) || loadedPages[0] || {}).id || null);
+        setDatabases(databasesResult.status === 'fulfilled' ? databasesResult.value : []);
+        setProfile(
+          profileResult.status === 'fulfilled'
+            ? profileResult.value
+            : { userId: user.id, plan: 'free', stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null }
+        );
+        if (profileResult.status === 'rejected') {
+          console.error('Glenwyn: failed to load profile (falling back to free plan locally)', profileResult.reason);
+        }
 
-        if (prefsResult.status === 'fulfilled' && prefsResult.value) {
-          const prefs = JSON.parse(prefsResult.value.value);
+        const prefs =
+          prefsResult.status === 'fulfilled' && prefsResult.value ? JSON.parse(prefsResult.value.value) : null;
+
+        if (prefs) {
           setDark(!!prefs.dark);
           setSidebarOpen(prefs.sidebarOpen !== false);
           setExpandedIds(prefs.expandedIds || {});
@@ -199,6 +207,19 @@ function Glenwyn({ user }) {
           const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
           setDark(prefersDark);
         }
+
+        // Idea #14 — a standing "Bandeja de entrada" page for quick fugitive
+        // notes, distinct from wherever you're deliberately organizing things.
+        // Remembered by id in local prefs (not a new column) — if that page is
+        // ever archived/deleted, or this is the first run, a fresh one is made.
+        const inboxExists = prefs?.inboxPageId && loadedPages.some((p) => p.id === prefs.inboxPageId && !p.isArchived);
+        if (inboxExists) {
+          setInboxPageId(prefs.inboxPageId);
+        } else {
+          const newInbox = emptyPage('Bandeja de entrada', null, loadedPages.filter((p) => p.parentId === null).length);
+          setPages((prev) => [...prev, newInbox]);
+          setInboxPageId(newInbox.id);
+        }
       } catch (e) {
         console.error('Glenwyn: failed to load pages/prefs', e);
         setPages([emptyPage('Bienvenida')]);
@@ -206,6 +227,7 @@ function Glenwyn({ user }) {
         setLoaded(true);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `user` only changes via a full remount of Glenwyn, never goes stale here
   }, []);
 
   // Saves `pagesRef.current` (always the latest state) to Supabase. Guarded against overlapping
@@ -263,8 +285,8 @@ function Glenwyn({ user }) {
   // ---- Persist prefs (device-local UI state — not synced to Supabase) ----
   useEffect(() => {
     if (!loaded) return;
-    storage.set('glenwyn:prefs', JSON.stringify({ dark, sidebarOpen, expandedIds, sortMode })).catch(() => {});
-  }, [dark, sidebarOpen, expandedIds, sortMode, loaded]);
+    storage.set('glenwyn:prefs', JSON.stringify({ dark, sidebarOpen, expandedIds, sortMode, inboxPageId })).catch(() => {});
+  }, [dark, sidebarOpen, expandedIds, sortMode, inboxPageId, loaded]);
 
 
   // ---- Keyboard shortcuts ----
@@ -278,6 +300,15 @@ function Glenwyn({ user }) {
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setSearchOpen((s) => !s);
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        quickCaptureToInbox();
+      }
+      if (mod && e.key === '.') {
+        e.preventDefault();
+        setZenMode((f) => !f);
+        setDeepWorkActive(false);
       }
       if (e.key === '?' && !mod) {
         // Only toggle when not actively typing — otherwise typing a literal "?" in a
@@ -298,10 +329,14 @@ function Glenwyn({ user }) {
         setShortcutsOpen(false);
         setTasksViewOpen(false);
         setTopbarMenuOpen(false);
+        setOrphansViewOpen(false);
+        setZenMode(false);
+        setDeepWorkActive(false);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- quickCaptureToInbox only touches stable setters and refs, safe to close over once
   }, []);
 
   useEffect(() => {
@@ -324,6 +359,13 @@ function Glenwyn({ user }) {
     window.addEventListener('click', closeIt);
     return () => window.removeEventListener('click', closeIt);
   }, [topbarMenuOpen]);
+
+  useEffect(() => {
+    if (!deepWorkMenuOpen) return;
+    const closeIt = () => setDeepWorkMenuOpen(false);
+    window.addEventListener('click', closeIt);
+    return () => window.removeEventListener('click', closeIt);
+  }, [deepWorkMenuOpen]);
 
   useEffect(() => {
     if (!titleIconPickerOpen) return;
@@ -349,7 +391,9 @@ function Glenwyn({ user }) {
   const selectPage = (id) => {
     setActiveId(id);
     setTasksViewOpen(false);
+    setOrphansViewOpen(false);
     if (isNarrow) setSidebarOpen(false);
+    setNavigationTrail((prev) => [id, ...prev.filter((x) => x !== id)].slice(0, 8));
   };
   const breadcrumbChain = useMemo(
     () => (activePage ? getAncestorChain(pages, activePage.id) : []),
@@ -361,8 +405,37 @@ function Glenwyn({ user }) {
     [pages, activePage]
   );
 
+  const outgoingLinks = useMemo(
+    () => (activePage ? getOutgoingLinks(pages, activePage.id) : []),
+    [pages, activePage]
+  );
+
+  // "Hub" pages — highlighted in the sidebar when referenced by 3+ other pages.
+  // No AI, no new infra: just a single pass over the backlinks that already exist.
+  const backlinkCounts = useMemo(() => getBacklinkCounts(pages), [pages]);
+  const HUB_THRESHOLD = 3;
+
   const allTasks = useMemo(() => getAllTasks(pages), [pages]);
+  const orphanPages = useMemo(() => getOrphanPages(pages), [pages]);
+  const trailPages = useMemo(
+    () =>
+      navigationTrail
+        .filter((id) => id !== activeId)
+        .map((id) => pages.find((p) => p.id === id))
+        .filter((p) => p && !p.isArchived)
+        .slice(0, 5),
+    [navigationTrail, activeId, pages]
+  );
   const today = new Date().toISOString().slice(0, 10);
+
+  const activeDatabase = useMemo(
+    () => (activePage ? databases.find((d) => d.pageId === activePage.id) : null),
+    [databases, activePage]
+  );
+  const databaseRecords = useMemo(
+    () => (activeDatabase ? getDatabaseRecords(pages, activeDatabase.id) : []),
+    [pages, activeDatabase]
+  );
 
   const createPage = useCallback((parentId = null, templateId = null) => {
     setPages((prev) => {
@@ -387,6 +460,195 @@ function Glenwyn({ user }) {
       return [...prev, p];
     });
   }, []);
+
+  // Idea #15 del banco de ideas — reduce la fricción de practicar Zettelkasten a
+  // un solo atajo: el texto seleccionado se convierte en su propia página nueva,
+  // y donde vivía antes queda una mención `[[así]]` apuntando ahí, vía el mismo
+  // sistema de menciones que ya existe. Se queda en la página de origen — no
+  // navega a la nueva, para no interrumpir en qué estabas trabajando.
+  const extractSelectionToPage = (sourcePageId, blockId, selectedText, selectionStart, selectionEnd) => {
+    const trimmed = selectedText.trim();
+    if (!trimmed) return;
+
+    const newTitle = truncateLabel(trimmed.split('\n')[0], 60);
+    const newPageId = uid();
+    const newPage = {
+      ...emptyPage(newTitle, null, pages.filter((p) => p.parentId === null).length),
+      id: newPageId,
+      blocks: [{ id: uid(), type: 'text', content: trimmed }],
+    };
+
+    setPages((prev) => [
+      ...prev.map((p) => {
+        if (p.id !== sourcePageId) return p;
+        return {
+          ...p,
+          blocks: p.blocks.map((b) => {
+            if (b.id !== blockId) return b;
+            const before = b.content.slice(0, selectionStart);
+            const after = b.content.slice(selectionEnd);
+            return { ...b, content: `${before}[[${newTitle}]]${after}` };
+          }),
+        };
+      }),
+      newPage,
+    ]);
+  };
+
+
+  // Creates a new page and immediately turns it into a database (Fase A: table
+  // view, basic property types). The page has to actually exist in `pages` in
+  // Postgres before `databases.page_id` can reference it as a foreign key, so
+  // this saves it directly and awaits that — going through the normal debounced
+  // autosave here would very likely race and fail with a foreign-key violation.
+  const createDatabasePage = async (parentId = null) => {
+    const siblings = pages.filter((p) => p.parentId === parentId);
+    const newPage = emptyPage('Base de datos sin título', parentId, siblings.length);
+
+    try {
+      await savePages(user.id, [newPage], new Set());
+    } catch (e) {
+      console.error('Glenwyn: failed to save new database page', e);
+      setSaveError('No se pudo crear la base de datos. Revisá tu conexión.');
+      return;
+    }
+
+    const defaultProperties = [
+      newProperty('select'),
+      newProperty('date'),
+    ];
+    defaultProperties[0].name = 'Estado';
+    defaultProperties[0].options = ['Por hacer', 'En progreso', 'Hecho'];
+    defaultProperties[1].name = 'Fecha';
+
+    try {
+      const db = await createDatabase(user.id, newPage.id, defaultProperties);
+      setDatabases((prev) => [...prev, db]);
+      setPages((prev) => [...prev, newPage]);
+      setActiveId(newPage.id);
+      if (parentId) setExpandedIds((e) => ({ ...e, [parentId]: true }));
+    } catch (e) {
+      console.error('Glenwyn: failed to create database', e);
+      setSaveError('No se pudo crear la base de datos.');
+    }
+  };
+
+  // Property-schema edits (add/rename/remove a column) persist immediately —
+  // they're infrequent, structural changes, not worth batching into the regular
+  // debounced page autosave.
+  const persistDatabaseProperties = async (databaseId, properties) => {
+    setDatabases((prev) => prev.map((d) => (d.id === databaseId ? { ...d, properties } : d)));
+    try {
+      await updateDatabaseProperties(databaseId, properties);
+    } catch (e) {
+      console.error('Glenwyn: failed to save database properties', e);
+      setSaveError('No se pudieron guardar las propiedades.');
+    }
+  };
+
+  const addDatabaseProperty = (databaseId) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(databaseId, [...db.properties, newProperty('text')]);
+  };
+
+  const renameDatabaseProperty = (databaseId, propertyId, name) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(
+      databaseId,
+      db.properties.map((prop) => (prop.id === propertyId ? { ...prop, name } : prop))
+    );
+  };
+
+  const changeDatabasePropertyType = (databaseId, propertyId, type) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(
+      databaseId,
+      db.properties.map((prop) =>
+        prop.id === propertyId
+          ? { ...prop, type, options: type === 'select' ? prop.options || ['Opción 1'] : undefined }
+          : prop
+      )
+    );
+  };
+
+  const removeDatabaseProperty = (databaseId, propertyId) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    const ok = window.confirm('Esto quita la columna para todos los registros. ¿Continuar?');
+    if (!ok) return;
+    persistDatabaseProperties(databaseId, db.properties.filter((prop) => prop.id !== propertyId));
+  };
+
+  // Fase C — which OTHER database a 'relation' property points to.
+  const setPropertyRelatedDatabase = (databaseId, propertyId, relatedDatabaseId) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(
+      databaseId,
+      db.properties.map((prop) => (prop.id === propertyId ? { ...prop, relatedDatabaseId } : prop))
+    );
+  };
+
+  // Fase C — a rollup needs to know which of THIS database's relation properties
+  // to walk, which property on the related records to read, and how to aggregate.
+  const setPropertyRollupConfig = (databaseId, propertyId, config) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(
+      databaseId,
+      db.properties.map((prop) => (prop.id === propertyId ? { ...prop, ...config } : prop))
+    );
+  };
+
+  // Fase D — every new record picks up each property's default value automatically.
+  const setPropertyDefaultValue = (databaseId, propertyId, defaultValue) => {
+    const db = databases.find((d) => d.id === databaseId);
+    if (!db) return;
+    persistDatabaseProperties(
+      databaseId,
+      db.properties.map((prop) => (prop.id === propertyId ? { ...prop, defaultValue } : prop))
+    );
+  };
+
+  // Record cell edits go through the normal `pages` state and the existing
+  // debounced autosave — a record is just a page, so it gets that machinery for free.
+  const updateRecordProperty = (recordId, propertyId, value) => {
+    setPages((prev) =>
+      prev.map((p) => (p.id === recordId ? { ...p, properties: { ...(p.properties || {}), [propertyId]: value } } : p))
+    );
+  };
+
+  // Toggles a single related record in/out of a 'relation' property's value —
+  // the value itself is just an array of page ids, same updateRecordProperty path.
+  const toggleRecordRelation = (recordId, propertyId, relatedId) => {
+    setPages((prev) =>
+      prev.map((p) => {
+        if (p.id !== recordId) return p;
+        const current = (p.properties && p.properties[propertyId]) || [];
+        const next = current.includes(relatedId)
+          ? current.filter((id) => id !== relatedId)
+          : [...current, relatedId];
+        return { ...p, properties: { ...(p.properties || {}), [propertyId]: next } };
+      })
+    );
+  };
+
+  const addDatabaseRecord = (databaseId, parentPageId, initialProperties = {}) => {
+    const db = databases.find((d) => d.id === databaseId);
+    const siblings = pages.filter((p) => p.databaseId === databaseId);
+    const record = {
+      ...emptyPage('', parentPageId, siblings.length),
+      databaseId,
+      // Defaults apply first; an explicit value (e.g. the board's "+ agregar" in a
+      // specific column, or the calendar's "+" on a specific day) always wins.
+      properties: { ...(db ? getDefaultPropertyValues(db.properties) : {}), ...initialProperties },
+    };
+    setPages((prev) => [...prev, record]);
+  };
+
 
   const renamePage = (id, title) => {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
@@ -630,31 +892,88 @@ function Glenwyn({ user }) {
   };
 
   const addBlock = (pageId, afterId, type = 'text') => {
+    // Generated up front (not inside the state updater) so we have a stable id to
+    // focus once the new block actually mounts.
+    const newId = uid();
     setPages((prev) =>
       prev.map((p) => {
         if (p.id !== pageId) return p;
         const idx = p.blocks.findIndex((b) => b.id === afterId);
-        const newBlock = { id: uid(), type, content: '' };
+        const newBlock = { id: newId, type, content: '' };
         const blocks = [...p.blocks];
         blocks.splice(idx + 1, 0, newBlock);
         return { ...p, blocks };
       })
     );
+    // Enter previously created the new block but left focus behind on the old one —
+    // repeated Enter presses just kept stacking empty blocks underneath without ever
+    // moving there. requestAnimationFrame waits for React to actually mount the new
+    // block (and register its ref) before trying to focus it.
+    requestAnimationFrame(() => {
+      const node = blockRefs.current[newId];
+      if (node) node.focus();
+    });
   };
+
+  // Idea #14 — the whole point of an inbox is zero friction: jump there and
+  // land with the cursor ready to type, in one shortcut, without having to
+  // think about where a fleeting thought belongs yet.
+  const quickCaptureToInbox = () => {
+    const targetId = inboxPageIdRef.current;
+    if (!targetId) return;
+    selectPage(targetId);
+    const inbox = pagesRef.current.find((p) => p.id === targetId);
+    if (!inbox || inbox.blocks.length === 0) return;
+    addBlock(targetId, inbox.blocks[inbox.blocks.length - 1].id, 'text');
+  };
+
+  // Modo Deep Work — a time-boxed session, same visual treatment as Modo Zen
+  // (hides sidebar + top bar), but ends on its own when the clock runs out
+  // instead of staying hidden until you remember to come back.
+  const startDeepWork = (minutes) => {
+    setDeepWorkSecondsLeft(minutes * 60);
+    setDeepWorkActive(true);
+    setDeepWorkMenuOpen(false);
+    setZenMode(false); // the two are mutually exclusive, not stacked
+  };
+
+  const stopDeepWork = () => {
+    setDeepWorkActive(false);
+    setDeepWorkSecondsLeft(0);
+  };
+
+  useEffect(() => {
+    if (!deepWorkActive) return;
+    const interval = setInterval(() => {
+      setDeepWorkSecondsLeft((s) => {
+        if (s <= 1) {
+          setDeepWorkActive(false);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [deepWorkActive]);
 
   // Ctrl/Cmd+D — clones a block (type, content, checked state) directly below itself.
   const duplicateBlock = (pageId, blockId) => {
+    const newId = uid();
     setPages((prev) =>
       prev.map((p) => {
         if (p.id !== pageId) return p;
         const idx = p.blocks.findIndex((b) => b.id === blockId);
         if (idx === -1) return p;
-        const copy = { ...p.blocks[idx], id: uid() };
+        const copy = { ...p.blocks[idx], id: newId };
         const blocks = [...p.blocks];
         blocks.splice(idx + 1, 0, copy);
         return { ...p, blocks };
       })
     );
+    requestAnimationFrame(() => {
+      const node = blockRefs.current[newId];
+      if (node) node.focus();
+    });
   };
 
   // Removes a block outright. A page can never end up with zero blocks — deleting
@@ -1050,6 +1369,43 @@ function Glenwyn({ user }) {
         />
       )}
 
+      {/* Modo Zen y Modo Deep Work (idea #42, con temporizador) — sidebar y barra
+          superior se ocultan/apagan vía sus propios estilos; este botón queda como
+          la única forma visible de salir, para no dejar a nadie atrapado sin saber
+          cómo volver — y en Deep Work, también muestra cuánto falta. */}
+      {hideChrome && (
+        <button
+          onClick={() => {
+            setZenMode(false);
+            stopDeepWork();
+          }}
+          className="glenwyn-focus"
+          title={deepWorkActive ? 'Terminar la sesión de Deep Work (Esc)' : 'Salir del Modo Zen (Esc)'}
+          style={{
+            position: 'fixed',
+            bottom: 18,
+            right: 18,
+            zIndex: 20,
+            background: t.canvasAlt,
+            border: `1px solid ${t.clay}`,
+            borderRadius: 20,
+            padding: '7px 14px',
+            fontSize: 12,
+            fontFamily: deepWorkActive ? monoFont : 'inherit',
+            color: t.fern,
+            cursor: 'pointer',
+            opacity: 0.55,
+            transition: 'opacity 150ms ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.55)}
+        >
+          {deepWorkActive
+            ? `⏱ ${String(Math.floor(deepWorkSecondsLeft / 60)).padStart(2, '0')}:${String(deepWorkSecondsLeft % 60).padStart(2, '0')} · terminar`
+            : '↺ salir del Zen'}
+        </button>
+      )}
+
       {/* ---- Sidebar ---- */}
       <div
         className={`glenwyn-sidebar${!sidebarOpen ? ' glenwyn-sidebar-closed' : ''}`}
@@ -1058,7 +1414,7 @@ function Glenwyn({ user }) {
           background: t.sidebarBg,
           borderRight: `1px solid ${t.clay}`,
           transition: 'width 200ms ease, background-color 150ms ease',
-          display: 'flex',
+          display: hideChrome ? 'none' : 'flex',
           flexDirection: 'column',
           flexShrink: 0,
         }}
@@ -1126,12 +1482,14 @@ function Glenwyn({ user }) {
               className="glenwyn-focus"
               onClick={() => {
                 setTasksViewOpen(true);
+                setOrphansViewOpen(false);
                 if (isNarrow) setSidebarOpen(false);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   setTasksViewOpen(true);
+                  setOrphansViewOpen(false);
                   if (isNarrow) setSidebarOpen(false);
                 }
               }}
@@ -1167,6 +1525,137 @@ function Glenwyn({ user }) {
                   {allTasks.filter((tsk) => !tsk.checked && tsk.dueDate <= today).length}
                 </span>
               )}
+            </div>
+          )}
+          {!searchQuery && inboxPageId && (
+            <div
+              role="button"
+              tabIndex={0}
+              className="glenwyn-focus"
+              title="Notas fugaces — anotá rápido, organizá después"
+              onClick={() => selectPage(inboxPageId)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectPage(inboxPageId);
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                gap: 8,
+                padding: '7px 8px',
+                borderRadius: 7,
+                cursor: 'pointer',
+                background: activeId === inboxPageId ? t.clay : 'transparent',
+                fontSize: 13.5,
+                color: activeId === inboxPageId ? t.bark : t.fern,
+                marginBottom: 6,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>📥</span>
+              {sidebarOpen && <span>Bandeja de entrada</span>}
+            </div>
+          )}
+          {!searchQuery && (
+            <div
+              role="button"
+              tabIndex={0}
+              className="glenwyn-focus"
+              title="Páginas que nadie enlaza ni menciona todavía"
+              onClick={() => {
+                setOrphansViewOpen(true);
+                setTasksViewOpen(false);
+                if (isNarrow) setSidebarOpen(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setOrphansViewOpen(true);
+                  setTasksViewOpen(false);
+                  if (isNarrow) setSidebarOpen(false);
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: sidebarOpen ? 'space-between' : 'center',
+                gap: 8,
+                padding: '7px 8px',
+                borderRadius: 7,
+                cursor: 'pointer',
+                background: orphansViewOpen ? t.clay : 'transparent',
+                fontSize: 13.5,
+                color: orphansViewOpen ? t.bark : t.fern,
+                marginBottom: 6,
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14 }}>🝓</span>
+                {sidebarOpen && <span>Notas huérfanas</span>}
+              </span>
+              {sidebarOpen && orphanPages.length > 0 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: monoFont,
+                    color: t.fern,
+                    background: t.clay,
+                    borderRadius: 10,
+                    padding: '1px 6px',
+                  }}
+                >
+                  {orphanPages.length}
+                </span>
+              )}
+            </div>
+          )}
+          {!searchQuery && sidebarOpen && trailPages.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  color: t.fern,
+                  fontFamily: monoFont,
+                  padding: '4px 8px 2px',
+                  opacity: 0.75,
+                }}
+              >
+                Recorrido reciente
+              </div>
+              {trailPages.map((p) => (
+                <div
+                  key={p.id}
+                  role="button"
+                  tabIndex={0}
+                  className="glenwyn-focus"
+                  onClick={() => selectPage(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      selectPage(p.id);
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '5px 8px',
+                    borderRadius: 7,
+                    cursor: 'pointer',
+                    fontSize: 12.5,
+                    color: t.fern,
+                  }}
+                >
+                  <span style={{ fontSize: 12.5 }}>{p.icon || '📄'}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.title || 'Sin título'}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
           {!searchQuery && sidebarOpen && pinnedPages.length > 0 && (
@@ -1293,6 +1782,10 @@ function Glenwyn({ user }) {
                   isDragging={dragId === p.id}
                   dropTarget={dropTarget}
                   dragEnabled={sortMode === 'manual'}
+                  isHub={(backlinkCounts[p.id] || 0) >= HUB_THRESHOLD}
+                  hubCount={backlinkCounts[p.id] || 0}
+                  maturity={getPageMaturity(p, backlinkCounts[p.id] || 0)}
+                  age={getPageAge(p)}
                   onClick={() => selectPage(p.id)}
                   onToggleExpand={(e) => {
                     e.stopPropagation();
@@ -1373,6 +1866,28 @@ function Glenwyn({ user }) {
                   </span>
                 </div>
               ))}
+              <div
+                onClick={() => {
+                  createDatabasePage(null);
+                  setTemplateMenuOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  gap: 9,
+                  alignItems: 'center',
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  borderTop: `1px solid ${t.clay}`,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ fontSize: 14 }}>🗄</span>
+                <span>
+                  <div style={{ fontSize: 12.5, color: t.bark }}>Base de datos</div>
+                  <div style={{ fontSize: 10.5, color: t.fern }}>Tabla con propiedades — estado, fecha, y más</div>
+                </span>
+              </div>
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: sidebarOpen ? 2 : 0 }}>
@@ -1484,6 +1999,66 @@ function Glenwyn({ user }) {
             <span style={{ fontSize: 14 }}>📖</span>
             {sidebarOpen && <span>Guía de uso</span>}
           </a>
+          <div style={{ position: 'relative' }}>
+            <button
+              className="glenwyn-focus"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeepWorkMenuOpen((o) => !o);
+              }}
+              title="Modo Deep Work — sesión de enfoque con temporizador"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                gap: 8,
+                padding: '7px 8px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: t.fern,
+                fontSize: 13.5,
+                borderRadius: 7,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>⏱</span>
+              {sidebarOpen && <span>Deep Work</span>}
+            </button>
+            {deepWorkMenuOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 8,
+                  marginBottom: 6,
+                  width: 170,
+                  background: t.canvas,
+                  border: `1px solid ${t.clay}`,
+                  borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  overflow: 'hidden',
+                  zIndex: 6,
+                }}
+              >
+                <div style={{ padding: '8px 10px 4px', fontSize: 10.5, color: t.fern, fontFamily: monoFont, textTransform: 'uppercase' }}>
+                  Duración de la sesión
+                </div>
+                {[25, 50, 90].map((minutes) => (
+                  <div
+                    key={minutes}
+                    onClick={() => startDeepWork(minutes)}
+                    style={{ padding: '8px 10px', fontSize: 13, color: t.bark, cursor: 'pointer' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {minutes} minutos
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             className="glenwyn-focus"
             onClick={() => setTrashOpen(true)}
@@ -1521,6 +2096,25 @@ function Glenwyn({ user }) {
               </span>
             )}
           </button>
+          {profile && sidebarOpen && (
+            <div
+              title="Tu plan actual"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 8px',
+                fontSize: 11,
+                fontFamily: monoFont,
+                color: t.fern,
+                textTransform: 'uppercase',
+                letterSpacing: '0.03em',
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: profile.plan === 'free' ? t.fern : t.sun }} />
+              Plan {profile.plan}
+            </div>
+          )}
           <button
             className="glenwyn-focus"
             onClick={() => supabase.auth.signOut()}
@@ -1578,6 +2172,9 @@ function Glenwyn({ user }) {
             color: t.fern,
             fontFamily: monoFont,
             zIndex: 2,
+            opacity: hideChrome ? 0.12 : 1,
+            pointerEvents: hideChrome ? 'none' : 'auto',
+            transition: 'opacity 200ms ease',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0 }}>
@@ -1613,11 +2210,11 @@ function Glenwyn({ user }) {
               </span>
             ))}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-              {tasksViewOpen ? '✓ Mis tareas' : activePage ? activePage.title || 'Sin título' : ''}
+              {tasksViewOpen ? '✓ Mis tareas' : orphansViewOpen ? '🝓 Notas huérfanas' : activePage ? activePage.title || 'Sin título' : ''}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'relative' }}>
-            {!isNarrow && !tasksViewOpen && activePage && (
+            {!isNarrow && !tasksViewOpen && !orphansViewOpen && activePage && (
               <>
                 <button
                   onClick={() => {
@@ -1675,7 +2272,7 @@ function Glenwyn({ user }) {
             {/* En pantallas angostas, compartir/exportar/historial/palabras se juntan en un
                 solo menú — mostrarlos todos sueltos es lo que causaba que se amontonaran y
                 se superpusieran con el indicador de guardado. */}
-            {isNarrow && !tasksViewOpen && activePage && (
+            {isNarrow && !tasksViewOpen && !orphansViewOpen && activePage && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1792,7 +2389,7 @@ function Glenwyn({ user }) {
             padding: '64px 32px 120px',
           }}
         >
-          <div style={{ width: '100%', maxWidth: 720 }}>
+          <div style={{ width: '100%', maxWidth: activeDatabase ? 920 : 720 }}>
             {tasksViewOpen ? (
               <TasksView
                 t={t}
@@ -1801,8 +2398,38 @@ function Glenwyn({ user }) {
                 onToggle={(pageId, blockId) => toggleTodo(pageId, blockId)}
                 onOpenPage={(pageId) => selectPage(pageId)}
               />
+            ) : orphansViewOpen ? (
+              <OrphanPagesView t={t} pages={orphanPages} onOpenPage={(pageId) => selectPage(pageId)} onArchive={(pageId) => archivePage(pageId)} />
             ) : !activePage ? (
               <EmptyState t={t} onCreate={() => createPage(null)} />
+            ) : activeDatabase ? (
+              <DatabaseView
+                t={t}
+                page={activePage}
+                database={activeDatabase}
+                databases={databases}
+                allPages={pages}
+                records={databaseRecords}
+                viewMode={databaseViewModes[activeDatabase.id] || 'table'}
+                onChangeViewMode={(mode) =>
+                  setDatabaseViewModes((prev) => ({ ...prev, [activeDatabase.id]: mode }))
+                }
+                onRenameProperty={(propId, name) => renameDatabaseProperty(activeDatabase.id, propId, name)}
+                onChangePropertyType={(propId, type) => changeDatabasePropertyType(activeDatabase.id, propId, type)}
+                onRemoveProperty={(propId) => removeDatabaseProperty(activeDatabase.id, propId)}
+                onAddProperty={() => addDatabaseProperty(activeDatabase.id)}
+                onSetRelatedDatabase={(propId, relatedDatabaseId) =>
+                  setPropertyRelatedDatabase(activeDatabase.id, propId, relatedDatabaseId)
+                }
+                onSetRollupConfig={(propId, config) => setPropertyRollupConfig(activeDatabase.id, propId, config)}
+                onSetDefaultValue={(propId, value) => setPropertyDefaultValue(activeDatabase.id, propId, value)}
+                onUpdateCell={updateRecordProperty}
+                onToggleRelation={toggleRecordRelation}
+                onRenameRecord={renamePage}
+                onAddRecord={(overrides) => addDatabaseRecord(activeDatabase.id, activePage.id, overrides)}
+                onOpenRecord={(id) => selectPage(id)}
+                onDeleteRecord={(id) => archivePage(id)}
+              />
             ) : (
               <>
                 <div style={{ position: 'relative', display: 'inline-block', marginBottom: 8 }}>
@@ -1859,6 +2486,7 @@ function Glenwyn({ user }) {
                     listNumber={b.type === 'numbered' ? numberedListPosition(activePage.blocks, i) : null}
                     onChange={(content) => updateBlock(activePage.id, b.id, content)}
                     onEnter={(nextType) => addBlock(activePage.id, b.id, nextType)}
+                    onExtractSelection={(text, start, end) => extractSelectionToPage(activePage.id, b.id, text, start, end)}
                     onToggle={() => toggleTodo(activePage.id, b.id)}
                     onDueDateChange={(dueDate) => updateTodoDueDate(activePage.id, b.id, dueDate)}
                     onCyclePriority={() => cycleTodoPriority(activePage.id, b.id)}
@@ -1882,6 +2510,15 @@ function Glenwyn({ user }) {
                     registerRef={registerBlockRef(b.id)}
                   />
                 ))}
+                {(backlinks.length > 0 || outgoingLinks.length > 0) && (
+                  <MiniGraphMap
+                    t={t}
+                    centerPage={activePage}
+                    incoming={backlinks}
+                    outgoing={outgoingLinks}
+                    onNavigate={selectPage}
+                  />
+                )}
                 {backlinks.length > 0 && (
                   <div style={{ marginTop: 48, paddingTop: 20, borderTop: `1px solid ${t.clay}` }}>
                     <div
@@ -2503,6 +3140,8 @@ function Glenwyn({ user }) {
                 { group: 'General', items: [
                   ['⌘ / Ctrl + \\', 'Colapsar / expandir el sidebar'],
                   ['⌘ / Ctrl + K', 'Búsqueda rápida'],
+                  ['⌘ / Ctrl + Shift + I', 'Captura rápida — ir a la Bandeja de entrada y empezar a escribir'],
+                  ['⌘ / Ctrl + .', 'Modo Zen — oculta todo menos lo que estás escribiendo'],
                   ['?', 'Mostrar esta ayuda'],
                   ['Esc', 'Cerrar el panel abierto'],
                 ]},
@@ -2511,6 +3150,7 @@ function Glenwyn({ user }) {
                   ['Shift + Enter', 'Salto de línea dentro del bloque'],
                   ['Backspace (línea vacía)', 'Eliminar el bloque y mover el foco arriba'],
                   ['⌘ / Ctrl + D', 'Duplicar el bloque'],
+                  ['⌘ / Ctrl + Shift + E (con texto seleccionado)', 'Extraer la selección a una página nueva'],
                   ['/', 'Abrir el menú de comandos'],
                   ['↑ ↓ (con el menú "/" abierto)', 'Navegar las opciones'],
                 ]},
@@ -2571,2047 +3211,6 @@ function Glenwyn({ user }) {
       )}
     </div>
   );
-}
-
-function PageRow({
-  page: p,
-  depth,
-  hasChildren,
-  isExpanded,
-  t,
-  sidebarOpen,
-  isActive,
-  isDragging,
-  dropTarget,
-  dragEnabled,
-  onClick,
-  onToggleExpand,
-  onDelete,
-  onAddSubpage,
-  onTogglePin,
-  onDuplicate,
-  onSetIcon,
-  onDragStart,
-  onDragEnd,
-  onDragOverRow,
-  onDropRow,
-}) {
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
-
-  useEffect(() => {
-    if (!iconPickerOpen) return;
-    const closeIt = () => setIconPickerOpen(false);
-    window.addEventListener('click', closeIt);
-    return () => window.removeEventListener('click', closeIt);
-  }, [iconPickerOpen]);
-  const isDropBefore = dropTarget && dropTarget.id === p.id && dropTarget.position === 'before';
-  const isDropAfter = dropTarget && dropTarget.id === p.id && dropTarget.position === 'after';
-  const isDropInside = dropTarget && dropTarget.id === p.id && dropTarget.position === 'inside';
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    if (!sidebarOpen) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const ratio = y / rect.height;
-    let position;
-    if (ratio < 0.25) position = 'before';
-    else if (ratio > 0.75) position = 'after';
-    else position = 'inside';
-    onDragOverRow(position);
-  };
-
-  return (
-    <div style={{ position: 'relative' }}>
-      {isDropBefore && (
-        <div style={{ height: 2, background: t.moss, marginLeft: 12 + depth * 14, borderRadius: 1 }} />
-      )}
-      <div
-        className="glenwyn-page-row glenwyn-focus"
-        role="button"
-        tabIndex={0}
-        aria-current={isActive ? 'page' : undefined}
-        draggable={sidebarOpen && dragEnabled}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragOver={handleDragOver}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (dropTarget && dropTarget.id === p.id) onDropRow(dropTarget.position);
-        }}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onClick();
-          }
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: sidebarOpen ? 'space-between' : 'center',
-          gap: 6,
-          padding: sidebarOpen ? '7px 8px' : '7px 0',
-          paddingLeft: sidebarOpen ? 8 + depth * 14 : 0,
-          borderRadius: 7,
-          cursor: 'grab',
-          background: isDropInside ? t.moss + '33' : isActive ? t.clay : 'transparent',
-          outline: isDropInside ? `1.5px dashed ${t.moss}` : 'none',
-          outlineOffset: -1.5,
-          marginBottom: 1,
-          opacity: isDragging ? 0.4 : 1,
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            minWidth: 0,
-            fontSize: 13.5,
-            color: isActive ? t.bark : t.fern,
-          }}
-        >
-          {sidebarOpen ? (
-            <span
-              onClick={onToggleExpand}
-              style={{
-                width: 14,
-                height: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                cursor: hasChildren ? 'pointer' : 'default',
-                transform: hasChildren && isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                transition: 'transform 120ms ease',
-                color: t.fern,
-              }}
-            >
-              {hasChildren ? '›' : ''}
-            </span>
-          ) : null}
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              if (sidebarOpen) setIconPickerOpen((o) => !o);
-            }}
-            style={{ fontSize: 14, flexShrink: 0, cursor: sidebarOpen ? 'pointer' : 'default', position: 'relative' }}
-          >
-            {p.icon || '📄'}
-            {iconPickerOpen && (
-              <IconPicker
-                t={t}
-                current={p.icon}
-                onPick={(icon) => {
-                  onSetIcon(icon);
-                  setIconPickerOpen(false);
-                }}
-              />
-            )}
-          </span>
-          {sidebarOpen && (
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {p.title || 'Sin título'}
-            </span>
-          )}
-        </div>
-        {sidebarOpen && (
-          <div
-            className="glenwyn-page-actions"
-            style={{ display: 'flex', gap: 2 }}
-          >
-            <button
-              onClick={onTogglePin}
-              title={p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-              aria-label={p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: p.pinned ? t.sun : t.fern,
-                fontSize: 12,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              {p.pinned ? '⭐' : '☆'}
-            </button>
-            <button
-              onClick={onAddSubpage}
-              title="Agregar subpágina"
-              aria-label="Agregar subpágina"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: t.fern,
-                fontSize: 13,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              +
-            </button>
-            <button
-              onClick={onDuplicate}
-              title="Duplicar página"
-              aria-label="Duplicar página"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: t.fern,
-                fontSize: 12,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              ⎘
-            </button>
-            <button
-              onClick={onDelete}
-              title="Mover a la papelera"
-              aria-label="Mover a la papelera"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: t.fern,
-                fontSize: 13,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              🗑
-            </button>
-          </div>
-        )}
-      </div>
-      {isDropAfter && (
-        <div style={{ height: 2, background: t.moss, marginLeft: 12 + depth * 14, borderRadius: 1 }} />
-      )}
-    </div>
-  );
-}
-
-const EMOJI_PALETTE = [
-  '📄', '📝', '📌', '📎', '📚', '📖', '🔖', '🗒️',
-  '💡', '🎯', '✅', '📅', '⏰', '🔥', '⭐', '❤️',
-  '🌿', '🌱', '🌙', '☀️', '☕', '🎨', '🎧', '🧠',
-  '💰', '🏠', '✈️', '🎓', '💼', '🔧', '📊', '🗂️',
-];
-
-function IconPicker({ t, current, onPick }) {
-  const [custom, setCustom] = useState('');
-
-  return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        marginTop: 4,
-        width: 208,
-        background: t.canvas,
-        border: `1px solid ${t.clay}`,
-        borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-        zIndex: 8,
-        padding: 8,
-      }}
-    >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, marginBottom: 8 }}>
-        {EMOJI_PALETTE.map((emoji) => (
-          <button
-            key={emoji}
-            onClick={() => onPick(emoji)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 15,
-              padding: 3,
-              borderRadius: 4,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input
-          className="glenwyn-focus"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && custom.trim()) {
-              e.preventDefault();
-              onPick(custom.trim().slice(0, 4));
-            }
-          }}
-          placeholder="pegar cualquier emoji…"
-          style={{
-            flex: 1,
-            border: `1px solid ${t.clay}`,
-            borderRadius: 6,
-            padding: '4px 6px',
-            fontSize: 12,
-            background: 'transparent',
-            color: t.bark,
-            outline: 'none',
-          }}
-        />
-        {current && (
-          <button
-            onClick={() => onPick(null)}
-            title="Quitar ícono"
-            style={{ fontSize: 11, color: t.fern, background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            quitar
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ t, onCreate }) {
-  return (
-    <div style={{ textAlign: 'center', paddingTop: 80 }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>🌿</div>
-      <div
-        style={{
-          fontFamily: displayFont,
-          fontSize: 22,
-          fontWeight: 500,
-          color: t.bark,
-          marginBottom: 8,
-        }}
-      >
-        Este espacio está esperando tu primera idea
-      </div>
-      <div style={{ fontSize: 13.5, color: t.fern, marginBottom: 20 }}>
-        Crea una página para empezar a escribir.
-      </div>
-      <button
-        onClick={onCreate}
-        style={{
-          background: t.moss,
-          color: t.canvas,
-          border: 'none',
-          padding: '9px 18px',
-          borderRadius: 8,
-          fontSize: 13.5,
-          cursor: 'pointer',
-        }}
-      >
-        + Nueva página
-      </button>
-    </div>
-  );
-}
-
-function TasksView({ t, tasks, today, onToggle, onOpenPage }) {
-  const overdue = tasks.filter((tsk) => !tsk.checked && tsk.dueDate < today);
-  const dueToday = tasks.filter((tsk) => !tsk.checked && tsk.dueDate === today);
-  const upcoming = tasks.filter((tsk) => !tsk.checked && tsk.dueDate > today);
-  const done = tasks.filter((tsk) => tsk.checked);
-
-  const groups = [
-    { label: 'Vencidas', items: overdue, color: t.error },
-    { label: 'Hoy', items: dueToday, color: t.moss },
-    { label: 'Próximas', items: upcoming, color: t.fern },
-  ];
-
-  const hasAnyPending = overdue.length + dueToday.length + upcoming.length > 0;
-
-  return (
-    <div>
-      <div style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 30, color: t.bark, marginBottom: 28 }}>
-        Mis tareas
-      </div>
-
-      {!hasAnyPending && (
-        <div style={{ fontSize: 13.5, color: t.fern, marginBottom: 24 }}>
-          No tenés tareas pendientes con fecha. Agregá una fecha de vencimiento desde cualquier tarea (📅) para
-          verla acá.
-        </div>
-      )}
-
-      {groups.map(
-        (group) =>
-          group.items.length > 0 && (
-            <div key={group.label} style={{ marginBottom: 28 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  color: group.color,
-                  fontFamily: monoFont,
-                  marginBottom: 8,
-                }}
-              >
-                {group.label} · {group.items.length}
-              </div>
-              {group.items.map((tsk) => (
-                <TaskRow key={tsk.blockId} t={t} task={tsk} onToggle={onToggle} onOpenPage={onOpenPage} />
-              ))}
-            </div>
-          )
-      )}
-
-      {done.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: t.fern,
-              fontFamily: monoFont,
-              marginBottom: 8,
-              opacity: 0.7,
-            }}
-          >
-            Completadas · {done.length}
-          </div>
-          {done.map((tsk) => (
-            <TaskRow key={tsk.blockId} t={t} task={tsk} onToggle={onToggle} onOpenPage={onOpenPage} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TaskRow({ t, task, onToggle, onOpenPage }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '8px 4px',
-        borderBottom: `1px solid ${t.clay}`,
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={task.checked}
-        onChange={() => onToggle(task.pageId, task.blockId)}
-        aria-label={`Tarea: ${task.content}`}
-        style={{ accentColor: t.moss, cursor: 'pointer', flexShrink: 0 }}
-      />
-      {task.priority && (
-        <span
-          style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[task.priority], fontSize: 12, flexShrink: 0 }}
-          title={{ 1: 'Prioridad alta', 2: 'Prioridad media', 3: 'Prioridad baja' }[task.priority]}
-        >
-          ⚑
-        </span>
-      )}
-      <span
-        style={{
-          flex: 1,
-          fontSize: 14,
-          color: task.checked ? t.fern : t.bark,
-          textDecoration: task.checked ? 'line-through' : 'none',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {task.content || 'Tarea sin descripción'}
-        {task.recurrence && <span style={{ color: t.moss, marginLeft: 6 }}>↻</span>}
-      </span>
-      <button
-        onClick={() => onOpenPage(task.pageId)}
-        className="glenwyn-focus"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: t.fern,
-          fontSize: 12,
-          flexShrink: 0,
-        }}
-        title="Ir a la página"
-      >
-        <span>{task.pageIcon || '📄'}</span>
-        <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {task.pageTitle}
-        </span>
-      </button>
-      <span
-        style={{
-          fontSize: 11.5,
-          fontFamily: monoFont,
-          color: t.fern,
-          flexShrink: 0,
-          minWidth: 44,
-          textAlign: 'right',
-        }}
-      >
-        {new Date(task.dueDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-      </span>
-    </div>
-  );
-}
-
-function Block({
-  block,
-  t,
-  onChange,
-  onEnter,
-  onToggle,
-  onDueDateChange,
-  onCyclePriority,
-  onRecurrenceChange,
-  onConvert,
-  onDuplicate,
-  listNumber,
-  onToggleBodyChange,
-  onToggleOpen,
-  onImageUrlChange,
-  onUploadFile,
-  onEmbedUrlChange,
-  onTableCellChange,
-  onTableAddRow,
-  onTableAddColumn,
-  onTableRemoveRow,
-  onTableRemoveColumn,
-  onDelete,
-  registerRef,
-  allPages,
-  onNavigate,
-  onSetPageLink,
-}) {
-  const ref = useRef(null);
-  const bodyRef = useRef(null);
-  const [slashOpen, setSlashOpen] = useState(false);
-  const [slashIndex, setSlashIndex] = useState(0);
-  const [isTextFocused, setIsTextFocused] = useState(false);
-  const [mentionTrigger, setMentionTrigger] = useState(null); // { startIndex, query } | null
-  const [mentionIndex, setMentionIndex] = useState(0);
-
-  // Combines the local auto-resize ref with the parent's registry (used to move focus
-  // to this block from a sibling after a delete).
-  const setMainRef = (el) => {
-    ref.current = el;
-    if (registerRef) registerRef(el);
-  };
-
-  // When a click on the "resolved mentions" display view switches a text block
-  // back into edit mode, focus the textarea once it's actually mounted.
-  useEffect(() => {
-    if (isTextFocused && ref.current) ref.current.focus();
-  }, [isTextFocused]);
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.style.height = 'auto';
-      ref.current.style.height = ref.current.scrollHeight + 'px';
-    }
-  }, [block.content]);
-
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.style.height = 'auto';
-      bodyRef.current.style.height = bodyRef.current.scrollHeight + 'px';
-    }
-  }, [block.body, block.open]);
-
-  const filteredCommands = slashOpen
-    ? SLASH_COMMANDS.filter((c) => {
-        const q = block.content.slice(1).toLowerCase();
-        if (!q) return true;
-        return c.label.toLowerCase().includes(q) || c.keywords.some((k) => k.includes(q));
-      })
-    : [];
-
-  const filteredMentionPages = mentionTrigger
-    ? (allPages || [])
-        .filter((p) => !p.isArchived)
-        .filter((p) => (p.title || '').toLowerCase().includes(mentionTrigger.query.toLowerCase()))
-        .slice(0, 8)
-    : [];
-
-  const runCommand = (cmd) => {
-    if (!cmd) return;
-    setSlashOpen(false);
-    setSlashIndex(0);
-    if (cmd.type === 'table') {
-      onConvert(cmd.type, '', { rows: [['', ''], ['', '']] });
-    } else {
-      onConvert(cmd.type, '');
-    }
-    if (cmd.type === 'divider') onEnter();
-  };
-
-  const handleChange = (value, cursorPos = value.length) => {
-    onChange(value);
-
-    if (value.startsWith('/')) {
-      setSlashOpen(true);
-      setSlashIndex(0);
-      return;
-    }
-    if (slashOpen) setSlashOpen(false);
-
-    // Mentions: only for plain text blocks. Looks for an unclosed "[[" working
-    // backward *from the cursor* (not just anywhere in the whole string) — with
-    // more than one mention in a paragraph, a whole-string search can find the
-    // wrong pair if you go back and edit earlier text after a later one is
-    // already closed.
-    if (block.type === 'text') {
-      const beforeCursor = value.slice(0, cursorPos);
-      const openIdx = beforeCursor.lastIndexOf('[[');
-      if (openIdx !== -1 && !beforeCursor.slice(openIdx + 2).includes(']]')) {
-        setMentionTrigger({ startIndex: openIdx, query: beforeCursor.slice(openIdx + 2) });
-        setMentionIndex(0);
-      } else if (mentionTrigger) {
-        setMentionTrigger(null);
-      }
-    }
-
-    // Markdown-style shortcuts only apply to plain text blocks.
-    if (block.type === 'text') {
-      const shortcut = detectMarkdownShortcut(value);
-      if (shortcut) {
-        onConvert(shortcut.type, shortcut.content, shortcut.extra);
-        if (shortcut.type === 'divider') onEnter();
-      }
-    }
-  };
-
-  const pickMention = (page) => {
-    if (!mentionTrigger) return;
-    const before = block.content.slice(0, mentionTrigger.startIndex);
-    const after = block.content.slice(mentionTrigger.startIndex + 2 + mentionTrigger.query.length);
-    onChange(`${before}[[${page.title || 'Sin título'}]]${after}`);
-    setMentionTrigger(null);
-  };
-
-  // Looks for a Spanish natural-language date phrase in a task's text ("mañana",
-  // "todos los lunes"...) and, if found, strips it from the text and sets the due
-  // date/recurrence instead. Deliberately only runs on blur/Enter — not on every
-  // keystroke — so it doesn't yank text out from under someone still typing
-  // (e.g. "mañana" shouldn't get eaten mid-word while typing "mañanita").
-  const applyNaturalDateIfFound = () => {
-    if (block.type !== 'todo' || !block.content) return;
-    const result = parseNaturalDateFromText(block.content);
-    if (!result) return;
-    onChange(result.cleanedText);
-    onDueDateChange(result.dueDate);
-    if (result.recurrence) onRecurrenceChange(result.recurrence);
-  };
-
-  const handleKeyDown = (e) => {
-    if (mentionTrigger) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setMentionIndex((i) => Math.min(i + 1, Math.max(filteredMentionPages.length - 1, 0)));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setMentionIndex((i) => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === 'Enter' && filteredMentionPages.length > 0) {
-        e.preventDefault();
-        pickMention(filteredMentionPages[mentionIndex]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMentionTrigger(null);
-        return;
-      }
-    }
-    if (slashOpen) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSlashIndex((i) => Math.min(i + 1, Math.max(filteredCommands.length - 1, 0)));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSlashIndex((i) => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        runCommand(filteredCommands[slashIndex]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setSlashOpen(false);
-        return;
-      }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const listLike = ['todo', 'bullet', 'numbered', 'quote'];
-      if (listLike.includes(block.type) && block.content.trim() === '') {
-        // A second Enter on an empty list item exits the list, like Notion.
-        onConvert('text', '');
-        return;
-      }
-      if (block.type === 'todo') applyNaturalDateIfFound();
-      // List-like blocks keep making the same type on Enter; others fall back to plain text.
-      onEnter(listLike.includes(block.type) ? block.type : 'text');
-      return;
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
-      e.preventDefault();
-      onDuplicate();
-      return;
-    }
-    if (e.key === 'Backspace' && block.content === '' && !slashOpen) {
-      // Backspace on an empty line removes the block and moves focus up, like most editors.
-      e.preventDefault();
-      onDelete();
-    }
-  };
-
-  const sharedTextareaStyle = {
-    width: '100%',
-    border: 'none',
-    outline: 'none',
-    background: 'transparent',
-    fontFamily: bodyFont,
-    fontSize: 15.5,
-    lineHeight: 1.7,
-    color: t.bark,
-    marginBottom: 4,
-  };
-
-  if (block.type === 'divider') {
-    return (
-      <div
-        className="glenwyn-divider-row"
-        style={{ position: 'relative', display: 'flex', alignItems: 'center', margin: '14px 0' }}
-      >
-        <div style={{ flex: 1, height: 1, background: t.clay }} />
-        <button
-          className="glenwyn-divider-delete"
-          onClick={onDelete}
-          title="Quitar divisor"
-          style={{
-            position: 'absolute',
-            right: 0,
-            fontSize: 11,
-            color: t.fern,
-            background: t.canvas,
-            border: 'none',
-            cursor: 'pointer',
-            opacity: 0,
-            padding: '2px 6px',
-          }}
-        >
-          quitar
-        </button>
-      </div>
-    );
-  }
-
-  if (block.type === 'todo') {
-    const today = new Date().toISOString().slice(0, 10);
-    const isOverdue = block.dueDate && block.dueDate < today && !block.checked;
-    const isToday = block.dueDate === today;
-    const dueDateColor = block.checked ? t.fern : isOverdue ? t.error : isToday ? t.moss : t.fern;
-    const priorityColor = { 1: t.error, 2: t.sun, 3: t.fern }[block.priority] || t.clay;
-    const priorityLabel = { 1: 'Prioridad alta', 2: 'Prioridad media', 3: 'Prioridad baja' }[block.priority] || 'Sin prioridad — click para agregar';
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6, position: 'relative' }}>
-        <input
-          type="checkbox"
-          checked={!!block.checked}
-          onChange={onToggle}
-          aria-label={block.content ? `Tarea: ${block.content}` : 'Tarea sin descripción'}
-          style={{ marginTop: 5, accentColor: t.moss, cursor: 'pointer' }}
-        />
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={applyNaturalDateIfFound}
-          placeholder="Tarea pendiente (ej. 'mañana', 'todos los lunes', 'en 3 días')"
-          style={{
-            ...sharedTextareaStyle,
-            flex: 1,
-            marginBottom: 0,
-            color: block.checked ? t.fern : t.bark,
-            textDecoration: block.checked ? 'line-through' : 'none',
-          }}
-        />
-        <button
-          onClick={onCyclePriority}
-          title={priorityLabel}
-          aria-label={priorityLabel}
-          className="glenwyn-focus"
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: priorityColor,
-            fontSize: 13,
-            marginTop: 6,
-            padding: 0,
-            flexShrink: 0,
-          }}
-        >
-          ⚑
-        </button>
-        {block.dueDate && (
-          <select
-            value={block.recurrence?.freq || ''}
-            onChange={(e) =>
-              onRecurrenceChange(e.target.value ? { freq: e.target.value, interval: 1 } : null)
-            }
-            title="Repetir"
-            className="glenwyn-focus"
-            style={{
-              marginTop: 6,
-              fontSize: 11,
-              fontFamily: monoFont,
-              color: block.recurrence ? t.moss : t.fern,
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <option value="">no se repite</option>
-            <option value="daily">↻ diaria</option>
-            <option value="weekly">↻ semanal</option>
-            <option value="monthly">↻ mensual</option>
-          </select>
-        )}
-        <label
-          title={block.dueDate ? 'Cambiar fecha de vencimiento' : 'Agregar fecha de vencimiento'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 3,
-            marginTop: 6,
-            fontSize: 11.5,
-            fontFamily: monoFont,
-            color: dueDateColor,
-            cursor: 'pointer',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <span>{block.dueDate ? new Date(block.dueDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '📅'}</span>
-          <input
-            type="date"
-            value={block.dueDate || ''}
-            onChange={(e) => onDueDateChange(e.target.value || null)}
-            className="glenwyn-focus"
-            style={{
-              position: 'absolute',
-              width: 1,
-              height: 1,
-              opacity: 0,
-              overflow: 'hidden',
-            }}
-          />
-        </label>
-        {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      </div>
-    );
-  }
-
-  if (block.type === 'heading') {
-    return (
-      <div style={{ position: 'relative' }}>
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Encabezado"
-          style={{
-            width: '100%',
-            border: 'none',
-            outline: 'none',
-            background: 'transparent',
-            fontFamily: displayFont,
-            fontWeight: 500,
-            fontSize: 22,
-            color: t.bark,
-            marginTop: 18,
-            marginBottom: 6,
-          }}
-        />
-        {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      </div>
-    );
-  }
-
-  if (block.type === 'bullet' || block.type === 'numbered') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 2, position: 'relative' }}>
-        <span
-          style={{
-            marginTop: 6,
-            fontSize: block.type === 'bullet' ? 18 : 15,
-            lineHeight: 1,
-            color: t.fern,
-            fontFamily: block.type === 'numbered' ? monoFont : bodyFont,
-            minWidth: 14,
-            textAlign: block.type === 'numbered' ? 'right' : 'left',
-            flexShrink: 0,
-          }}
-        >
-          {block.type === 'bullet' ? '•' : `${listNumber}.`}
-        </span>
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={block.type === 'bullet' ? 'Elemento de lista' : 'Elemento numerado'}
-          style={{ ...sharedTextareaStyle, flex: 1, marginBottom: 0 }}
-        />
-        {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      </div>
-    );
-  }
-
-  if (block.type === 'quote') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-          borderLeft: `2.5px solid ${t.moss}`,
-          paddingLeft: 14,
-          margin: '10px 0',
-          position: 'relative',
-        }}
-      >
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Cita"
-          style={{
-            ...sharedTextareaStyle,
-            fontStyle: 'italic',
-            color: t.fern,
-            marginBottom: 0,
-          }}
-        />
-        {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      </div>
-    );
-  }
-
-  if (block.type === 'callout') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 10,
-          background: t.clay,
-          borderRadius: 8,
-          padding: '10px 14px',
-          margin: '10px 0',
-          position: 'relative',
-        }}
-      >
-        <span style={{ fontSize: 16, marginTop: 2 }}>💡</span>
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Nota destacada"
-          style={{ ...sharedTextareaStyle, flex: 1, marginBottom: 0 }}
-        />
-        {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      </div>
-    );
-  }
-
-  if (block.type === 'toggle') {
-    const isOpen = block.open !== false;
-    return (
-      <div style={{ margin: '2px 0', position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-          <span
-            onClick={onToggleOpen}
-            style={{
-              width: 16,
-              height: 22,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              cursor: 'pointer',
-              color: t.fern,
-              fontSize: 11,
-              transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-              transition: 'transform 120ms ease',
-            }}
-          >
-            ▸
-          </span>
-          <textarea
-            ref={setMainRef}
-            className="glenwyn-block glenwyn-focus"
-            rows={1}
-            value={block.content}
-            onChange={(e) => handleChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Título del desplegable"
-            style={{ ...sharedTextareaStyle, flex: 1, marginBottom: 0, fontWeight: 500 }}
-          />
-          {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-        </div>
-        {isOpen && (
-          <div style={{ paddingLeft: 22, marginTop: 2 }}>
-            <textarea
-              ref={bodyRef}
-              rows={1}
-              value={block.body || ''}
-              onChange={(e) => onToggleBodyChange(e.target.value)}
-              placeholder="Escribí el contenido oculto acá — Enter hace un salto de línea normal"
-              style={{ ...sharedTextareaStyle, color: t.fern, fontSize: 14.5 }}
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (block.type === 'image') {
-    return (
-      <ImageBlock
-        block={block}
-        t={t}
-        onUrlChange={onImageUrlChange}
-        onCaptionChange={handleChange}
-        onDelete={onDelete}
-        onUploadFile={onUploadFile}
-      />
-    );
-  }
-
-  if (block.type === 'table') {
-    return (
-      <TableBlock
-        block={block}
-        t={t}
-        onCellChange={onTableCellChange}
-        onAddRow={onTableAddRow}
-        onAddColumn={onTableAddColumn}
-        onRemoveRow={onTableRemoveRow}
-        onRemoveColumn={onTableRemoveColumn}
-        onDelete={onDelete}
-      />
-    );
-  }
-
-  if (block.type === 'embed') {
-    return <EmbedBlock block={block} t={t} onUrlChange={onEmbedUrlChange} onDelete={onDelete} />;
-  }
-
-  if (block.type === 'page-link') {
-    return (
-      <PageLinkBlock
-        block={block}
-        t={t}
-        allPages={allPages}
-        onNavigate={onNavigate}
-        onSetPageLink={onSetPageLink}
-        onDelete={onDelete}
-      />
-    );
-  }
-
-  const showMentionDisplay = block.type === 'text' && !isTextFocused && hasMentions(block.content);
-
-  return (
-    <div style={{ position: 'relative' }}>
-      {showMentionDisplay ? (
-        <div
-          role="button"
-          tabIndex={0}
-          className="glenwyn-focus"
-          onClick={() => setIsTextFocused(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              setIsTextFocused(true);
-            }
-          }}
-          style={{ ...sharedTextareaStyle, cursor: 'text', minHeight: '1.7em', whiteSpace: 'pre-wrap' }}
-        >
-          {parseMentions(block.content, allPages).map((seg, i) =>
-            seg.type === 'text' ? (
-              <span key={i}>{seg.value}</span>
-            ) : (
-              <span
-                key={i}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (seg.pageId) onNavigate(seg.pageId);
-                }}
-                title={seg.pageId ? 'Ir a la página' : 'Esta página no existe (o cambió de nombre)'}
-                style={{
-                  color: seg.pageId ? t.moss : t.fern,
-                  textDecoration: 'underline',
-                  textDecorationStyle: seg.pageId ? 'solid' : 'dashed',
-                  textDecorationColor: t.clay,
-                  cursor: seg.pageId ? 'pointer' : 'default',
-                }}
-              >
-                {seg.value}
-              </span>
-            )
-          )}
-        </div>
-      ) : (
-        <textarea
-          ref={setMainRef}
-          className="glenwyn-block glenwyn-focus"
-          rows={1}
-          value={block.content}
-          onChange={(e) => handleChange(e.target.value, e.target.selectionStart)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setIsTextFocused(true)}
-          onBlur={() => {
-            setIsTextFocused(false);
-            setMentionTrigger(null);
-          }}
-          placeholder="Escribe algo, '/' para comandos, [[ para mencionar una página, o Enter para una línea nueva…"
-          style={sharedTextareaStyle}
-        />
-      )}
-      {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
-      {mentionTrigger && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            marginTop: 2,
-            width: 240,
-            background: t.canvas,
-            border: `1px solid ${t.clay}`,
-            borderRadius: 8,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-            zIndex: 5,
-            overflow: 'hidden',
-          }}
-        >
-          {filteredMentionPages.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 12.5, color: t.fern }}>
-              sin páginas que coincidan
-            </div>
-          ) : (
-            filteredMentionPages.map((p, i) => (
-              <div
-                key={p.id}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pickMention(p);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  background: i === mentionIndex ? t.clay : 'transparent',
-                  fontSize: 13,
-                }}
-              >
-                <span>{p.icon || '📄'}</span>
-                <span style={{ color: t.bark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.title || 'Sin título'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ImageBlock({ block, t, onUrlChange, onCaptionChange, onDelete, onUploadFile }) {
-  const [draft, setDraft] = useState(block.url || '');
-  const [broken, setBroken] = useState(false);
-  const [urlError, setUrlError] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleFileChosen = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = ''; // allow re-picking the same file later
-    if (!file) return;
-    setUploading(true);
-    setUrlError('');
-    try {
-      await onUploadFile(file);
-    } catch (err) {
-      setUrlError(err.message || 'No pudimos subir la imagen.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  if (!block.url) {
-    return (
-      <div style={{ margin: '10px 0' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            border: `1px dashed ${t.clay}`,
-            borderRadius: 8,
-            padding: '10px 12px',
-          }}
-        >
-          <span style={{ fontSize: 14 }}>🖼️</span>
-          <input
-            className="glenwyn-focus"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              if (urlError) setUrlError('');
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && draft.trim()) {
-                e.preventDefault();
-                if (!isHttpUrl(draft.trim())) {
-                  setUrlError('Tiene que ser un link http(s) válido.');
-                  return;
-                }
-                onUrlChange(draft.trim());
-              }
-              if (e.key === 'Backspace' && draft === '') {
-                e.preventDefault();
-                onDelete();
-              }
-            }}
-            placeholder={uploading ? 'Subiendo imagen…' : 'Pegá el link de una imagen…'}
-            disabled={uploading}
-            style={{
-              flex: 1,
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              fontFamily: bodyFont,
-              fontSize: 13.5,
-              color: t.bark,
-            }}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChosen}
-            style={{ display: 'none' }}
-          />
-          <button
-            onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            disabled={uploading}
-            style={{
-              flexShrink: 0,
-              fontSize: 12,
-              color: t.moss,
-              background: 'none',
-              border: `1px solid ${t.moss}`,
-              borderRadius: 6,
-              padding: '4px 8px',
-              cursor: uploading ? 'default' : 'pointer',
-              opacity: uploading ? 0.6 : 1,
-            }}
-          >
-            {uploading ? 'subiendo…' : 'subir archivo'}
-          </button>
-        </div>
-        {urlError && <div style={{ fontSize: 11, color: t.error, marginTop: 4, paddingLeft: 4 }}>{urlError}</div>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="glenwyn-media-row" style={{ margin: '10px 0', position: 'relative' }}>
-      <button
-        className="glenwyn-media-delete"
-        onClick={onDelete}
-        title="Quitar imagen"
-        style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          fontSize: 11,
-          color: '#fff',
-          background: 'rgba(20,20,15,0.55)',
-          border: 'none',
-          borderRadius: 5,
-          cursor: 'pointer',
-          opacity: 0,
-          padding: '3px 7px',
-          zIndex: 1,
-        }}
-      >
-        ✕
-      </button>
-      {broken ? (
-        <div
-          style={{
-            border: `1px dashed ${t.clay}`,
-            borderRadius: 8,
-            padding: '16px 12px',
-            fontSize: 12.5,
-            color: t.fern,
-            textAlign: 'center',
-          }}
-        >
-          No pudimos cargar esta imagen — revisá el link.
-          <button
-            onClick={() => {
-              setBroken(false);
-              onUrlChange('');
-            }}
-            style={{
-              display: 'block',
-              margin: '8px auto 0',
-              background: 'none',
-              border: 'none',
-              color: t.moss,
-              cursor: 'pointer',
-              fontSize: 12.5,
-            }}
-          >
-            cambiar link
-          </button>
-        </div>
-      ) : (
-        <img
-          src={block.url}
-          alt={block.content || ''}
-          onError={() => setBroken(true)}
-          style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }}
-        />
-      )}
-      <input
-        className="glenwyn-focus"
-        value={block.content}
-        onChange={(e) => onCaptionChange(e.target.value)}
-        placeholder="Agregar un pie de foto (opcional)"
-        style={{
-          width: '100%',
-          border: 'none',
-          outline: 'none',
-          background: 'transparent',
-          fontFamily: bodyFont,
-          fontSize: 12.5,
-          color: t.fern,
-          marginTop: 6,
-          textAlign: 'center',
-        }}
-      />
-    </div>
-  );
-}
-
-function TableBlock({ block, t, onCellChange, onAddRow, onAddColumn, onRemoveRow, onRemoveColumn, onDelete }) {
-  const rows = block.rows || [['', '']];
-  const [hoveredRow, setHoveredRow] = useState(null);
-  const [hoveredCol, setHoveredCol] = useState(null);
-
-  return (
-    <div style={{ margin: '12px 0', overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <tbody>
-          {rows.map((row, r) => (
-            <tr key={r} onMouseEnter={() => setHoveredRow(r)} onMouseLeave={() => setHoveredRow(null)}>
-              {row.map((cell, c) => (
-                <td
-                  key={c}
-                  onMouseEnter={() => setHoveredCol(c)}
-                  onMouseLeave={() => setHoveredCol(null)}
-                  style={{
-                    border: `1px solid ${t.clay}`,
-                    padding: 0,
-                    background: r === 0 ? t.clay : 'transparent',
-                    position: 'relative',
-                    minWidth: 90,
-                  }}
-                >
-                  <input
-                    className="glenwyn-focus"
-                    value={cell}
-                    onChange={(e) => onCellChange(r, c, e.target.value)}
-                    style={{
-                      width: '100%',
-                      border: 'none',
-                      outline: 'none',
-                      background: 'transparent',
-                      padding: '6px 8px',
-                      fontSize: 13,
-                      fontWeight: r === 0 ? 600 : 400,
-                      color: t.bark,
-                      fontFamily: bodyFont,
-                    }}
-                  />
-                  {r === 0 && c === row.length - 1 && hoveredCol === c && row.length > 1 && (
-                    <button
-                      onClick={() => onRemoveColumn(c)}
-                      title="Quitar columna"
-                      style={{
-                        position: 'absolute',
-                        top: 2,
-                        right: 2,
-                        fontSize: 9,
-                        border: 'none',
-                        background: 'none',
-                        color: t.fern,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </td>
-              ))}
-              <td style={{ border: 'none', padding: '0 4px', width: 24 }}>
-                {hoveredRow === r && rows.length > 1 && (
-                  <button
-                    onClick={() => onRemoveRow(r)}
-                    title="Quitar fila"
-                    style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 11 }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-        <button
-          onClick={onAddRow}
-          style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 12 }}
-        >
-          + fila
-        </button>
-        <button
-          onClick={onAddColumn}
-          style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 12 }}
-        >
-          + columna
-        </button>
-        <button
-          onClick={onDelete}
-          style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 12, marginLeft: 'auto' }}
-        >
-          quitar tabla
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function EmbedBlock({ block, t, onUrlChange, onDelete }) {
-  const [draft, setDraft] = useState(block.url || '');
-  const [urlError, setUrlError] = useState('');
-
-  if (!block.url) {
-    return (
-      <div style={{ margin: '10px 0' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            border: `1px dashed ${t.clay}`,
-            borderRadius: 8,
-            padding: '10px 12px',
-          }}
-        >
-          <span style={{ fontSize: 14 }}>▶</span>
-          <input
-            className="glenwyn-focus"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              if (urlError) setUrlError('');
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && draft.trim()) {
-                e.preventDefault();
-                if (!isHttpUrl(draft.trim())) {
-                  setUrlError('Tiene que ser un link http(s) válido.');
-                  return;
-                }
-                onUrlChange(draft.trim());
-              }
-              if (e.key === 'Backspace' && draft === '') {
-                e.preventDefault();
-                onDelete();
-              }
-            }}
-            placeholder="Pegá un link de YouTube, Vimeo, Loom, Spotify, o cualquier URL"
-            style={{
-              flex: 1,
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              fontFamily: bodyFont,
-              fontSize: 13.5,
-              color: t.bark,
-            }}
-          />
-        </div>
-        {urlError && <div style={{ fontSize: 11, color: t.error, marginTop: 4, paddingLeft: 4 }}>{urlError}</div>}
-      </div>
-    );
-  }
-
-  const { kind, embedSrc, ratio } = parseEmbedUrl(block.url);
-
-  return (
-    <div className="glenwyn-media-row" style={{ margin: '10px 0', position: 'relative' }}>
-      <button
-        className="glenwyn-media-delete"
-        onClick={onDelete}
-        title="Quitar embed"
-        style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          fontSize: 11,
-          color: '#fff',
-          background: 'rgba(20,20,15,0.55)',
-          border: 'none',
-          borderRadius: 5,
-          cursor: 'pointer',
-          opacity: 0,
-          padding: '3px 7px',
-          zIndex: 1,
-        }}
-      >
-        ✕
-      </button>
-
-      {kind === 'generic' ? (
-        <a
-          href={block.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'block',
-            border: `1px solid ${t.clay}`,
-            borderRadius: 8,
-            padding: '12px 14px',
-            textDecoration: 'none',
-          }}
-        >
-          <div style={{ fontSize: 13, color: t.bark, fontWeight: 500 }}>{block.url}</div>
-          <div style={{ fontSize: 11.5, color: t.fern, marginTop: 2 }}>Abrir enlace ↗</div>
-        </a>
-      ) : kind === 'spotify' ? (
-        <iframe
-          src={embedSrc}
-          title="embed"
-          width="100%"
-          height="152"
-          style={{ border: 'none', borderRadius: 8, display: 'block' }}
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        />
-      ) : (
-        <div style={{ position: 'relative', width: '100%', paddingTop: ratio, borderRadius: 8, overflow: 'hidden' }}>
-          <iframe
-            src={embedSrc}
-            title="embed"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PageLinkBlock({ block, t, allPages, onNavigate, onSetPageLink, onDelete }) {
-  const [query, setQuery] = useState('');
-  const linkedPage = block.linkedPageId ? allPages.find((p) => p.id === block.linkedPageId) : null;
-
-  // Not linked yet — show a small inline picker to search and pick a page.
-  if (!block.linkedPageId) {
-    const results = query
-      ? allPages.filter((p) => p.title.toLowerCase().includes(query.toLowerCase()))
-      : allPages;
-
-    return (
-      <div style={{ margin: '10px 0', border: `1px solid ${t.clay}`, borderRadius: 8, overflow: 'hidden' }}>
-        <input
-          className="glenwyn-focus"
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Backspace' && query === '') {
-              e.preventDefault();
-              onDelete();
-            }
-          }}
-          placeholder="Buscar una página para enlazar…"
-          style={{
-            width: '100%',
-            border: 'none',
-            outline: 'none',
-            background: 'transparent',
-            padding: '9px 12px',
-            fontFamily: bodyFont,
-            fontSize: 13.5,
-            color: t.bark,
-            borderBottom: `1px solid ${t.clay}`,
-          }}
-        />
-        <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-          {results.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 12.5, color: t.fern }}>No encontramos ninguna página.</div>
-          ) : (
-            results.map((p) => (
-              <div
-                key={p.id}
-                role="button"
-                tabIndex={0}
-                className="glenwyn-focus"
-                onClick={() => onSetPageLink(p.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSetPageLink(p.id);
-                  }
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', fontSize: 13 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <span>📄</span>
-                <span style={{ color: t.bark }}>{p.title || 'Sin título'}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Linked page no longer exists (deleted for good) — offer to clear the link.
-  if (!linkedPage) {
-    return (
-      <div
-        style={{
-          margin: '8px 0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 12px',
-          border: `1px dashed ${t.clay}`,
-          borderRadius: 8,
-          fontSize: 13,
-          color: t.fern,
-        }}
-      >
-        <span>📄</span>
-        <span style={{ flex: 1 }}>Esta página ya no existe.</span>
-        <button onClick={onDelete} style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 12 }}>
-          quitar
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="glenwyn-media-row"
-      onClick={() => onNavigate(linkedPage.id)}
-      style={{
-        margin: '8px 0',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 12px',
-        border: `1px solid ${t.clay}`,
-        borderRadius: 8,
-        fontSize: 13.5,
-        color: t.bark,
-        cursor: 'pointer',
-        position: 'relative',
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-    >
-      <span>📄</span>
-      <span style={{ flex: 1, textDecoration: 'underline', textDecorationColor: t.clay }}>
-        {linkedPage.title || 'Sin título'}
-      </span>
-      <button
-        className="glenwyn-media-delete"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        title="Quitar link"
-        style={{
-          fontSize: 11,
-          color: t.fern,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          opacity: 0,
-        }}
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
-function SlashMenu({ t, commands, index, onPick }) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        marginTop: 2,
-        width: 240,
-        background: t.canvas,
-        border: `1px solid ${t.clay}`,
-        borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-        zIndex: 5,
-        overflow: 'hidden',
-      }}
-    >
-      {commands.length === 0 ? (
-        <div style={{ padding: '10px 12px', fontSize: 12.5, color: t.fern }}>sin resultados</div>
-      ) : (
-        commands.map((c, i) => (
-          <div
-            key={c.type}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onPick(c);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '8px 12px',
-              cursor: 'pointer',
-              background: i === index ? t.clay : 'transparent',
-            }}
-          >
-            <span
-              style={{
-                width: 22,
-                height: 22,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 5,
-                background: t.clay,
-                color: t.moss,
-                fontSize: 12,
-                flexShrink: 0,
-              }}
-            >
-              {c.icon}
-            </span>
-            <span>
-              <div style={{ fontSize: 13, color: t.bark }}>{c.label}</div>
-              <div style={{ fontSize: 11, color: t.fern }}>{c.desc}</div>
-            </span>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function SharedPageView({ token }) {
-  const [state, setState] = useState('loading'); // loading | ready | not-found | error
-  const [page, setPage] = useState(null);
-  const dark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const t = dark ? tokens.dark : tokens.light;
-
-  useEffect(() => {
-    // A malformed token (missing, truncated, or with extra path segments) can never
-    // match a real share — treat it as "not found" instead of hitting the RPC and
-    // surfacing a raw Postgres type error to a visitor.
-    if (!UUID_PATTERN.test(token || '')) {
-      setState('not-found');
-      return;
-    }
-    let cancelled = false;
-    fetchSharedPage(token)
-      .then((result) => {
-        if (cancelled) return;
-        if (!result) {
-          setState('not-found');
-        } else {
-          setPage(result);
-          setState('ready');
-        }
-      })
-      .catch((e) => {
-        console.error('Glenwyn: failed to load shared page', e);
-        if (!cancelled) setState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  // Best-effort SEO/social metadata for this specific shared page. Important caveat:
-  // most social crawlers (Facebook, Twitter, Slack, WhatsApp link previews) don't run
-  // JavaScript, so they'll only ever see the generic tags baked into index.html —
-  // this only helps clients that do render JS before reading the page.
-  useEffect(() => {
-    if (!page) return;
-    document.title = `${page.title || 'Sin título'} · Glenwyn`;
-
-    const excerpt = page.blocks
-      .map((b) => b.content || '')
-      .join(' ')
-      .trim()
-      .slice(0, 160);
-    const description = excerpt || 'Una página compartida desde Glenwyn.';
-
-    const setMeta = (selector, content) => {
-      const el = document.querySelector(selector);
-      if (el) el.setAttribute('content', content);
-    };
-    setMeta('meta[name="description"]', description);
-    setMeta('meta[property="og:title"]', page.title || 'Sin título');
-    setMeta('meta[property="og:description"]', description);
-    setMeta('meta[name="twitter:title"]', page.title || 'Sin título');
-    setMeta('meta[name="twitter:description"]', description);
-
-    return () => {
-      document.title = 'Glenwyn';
-      setMeta('meta[name="description"]', 'Glenwyn — un espacio de trabajo inmersivo y distraction-free para tus notas, inspirado en Notion. Cozy, minimalista, sin ruido visual.');
-      setMeta('meta[property="og:title"]', 'Glenwyn');
-      setMeta('meta[property="og:description"]', 'Un espacio de trabajo inmersivo y distraction-free para tus notas.');
-      setMeta('meta[name="twitter:title"]', 'Glenwyn');
-      setMeta('meta[name="twitter:description"]', 'Un espacio de trabajo inmersivo y distraction-free para tus notas.');
-    };
-  }, [page]);
-
-  if (state === 'loading') {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.canvas, color: t.fern, fontFamily: bodyFont }}>
-        cargando…
-      </div>
-    );
-  }
-
-  if (state === 'not-found' || state === 'error') {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.canvas, fontFamily: bodyFont, textAlign: 'center', padding: 24 }}>
-        <div>
-          <div style={{ fontFamily: displayFont, fontSize: 20, color: t.bark, marginBottom: 8 }}>
-            {state === 'not-found' ? 'Este link ya no está disponible' : 'Algo salió mal'}
-          </div>
-          <div style={{ fontSize: 13, color: t.fern }}>
-            {state === 'not-found'
-              ? 'Puede que quien la compartió haya desactivado el link, o la página ya no exista.'
-              : 'Probá recargar la página en un rato.'}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ minHeight: '100vh', background: t.canvas, color: t.bark, fontFamily: bodyFont }}>
-      <style>{`
-        @media (max-width: 640px) {
-          .glenwyn-canvas-content { padding-left: 20px !important; padding-right: 20px !important; }
-          .glenwyn-topbar { padding-left: 16px !important; padding-right: 16px !important; }
-        }
-      `}</style>
-      <div
-        className="glenwyn-topbar"
-        style={{
-          padding: '10px 28px',
-          borderBottom: `1px solid ${t.clay}`,
-          fontSize: 12,
-          color: t.fern,
-          fontFamily: monoFont,
-          display: 'flex',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span>vista de solo lectura · Glenwyn</span>
-        <a href="/" style={{ color: t.moss, textDecoration: 'none' }}>
-          ir a Glenwyn →
-        </a>
-      </div>
-      <div className="glenwyn-canvas-content" style={{ maxWidth: 720, margin: '0 auto', padding: '48px 32px 120px' }}>
-        <div style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 34, color: t.bark, marginBottom: 28 }}>
-          {page.title || 'Sin título'}
-        </div>
-        {page.blocks.map((b) => (
-          <ReadOnlyBlock key={b.id} block={b} t={t} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Renders a single block for the public share view — no inputs, no handlers, just markup.
-function ReadOnlyBlock({ block: b, t }) {
-  switch (b.type) {
-    case 'heading':
-      return <div style={{ fontFamily: displayFont, fontWeight: 500, fontSize: 22, marginTop: 18, marginBottom: 6 }}>{b.content}</div>;
-    case 'todo':
-      return (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 6, alignItems: 'flex-start' }}>
-          <input type="checkbox" checked={!!b.checked} readOnly style={{ marginTop: 5, accentColor: t.moss }} />
-          {b.priority && (
-            <span style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[b.priority], fontSize: 12, marginTop: 3 }}>⚑</span>
-          )}
-          <span style={{ flex: 1, color: b.checked ? t.fern : t.bark, textDecoration: b.checked ? 'line-through' : 'none' }}>{b.content}</span>
-          {b.dueDate && (
-            <span style={{ fontSize: 11.5, fontFamily: monoFont, color: t.fern, flexShrink: 0, marginTop: 2 }}>
-              {new Date(b.dueDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-            </span>
-          )}
-        </div>
-      );
-    case 'bullet':
-      return (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 2 }}>
-          <span style={{ color: t.fern }}>•</span>
-          <span>{b.content}</span>
-        </div>
-      );
-    case 'numbered':
-      return <div style={{ marginBottom: 2 }}>{b.content}</div>;
-    case 'quote':
-      return (
-        <div style={{ borderLeft: `2.5px solid ${t.moss}`, paddingLeft: 14, margin: '10px 0', fontStyle: 'italic', color: t.fern }}>
-          {b.content}
-        </div>
-      );
-    case 'callout':
-      return (
-        <div style={{ display: 'flex', gap: 10, background: t.clay, borderRadius: 8, padding: '10px 14px', margin: '10px 0' }}>
-          <span>💡</span>
-          <span>{b.content}</span>
-        </div>
-      );
-    case 'toggle':
-      return (
-        <details style={{ margin: '6px 0' }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 500 }}>{b.content || 'Desplegable'}</summary>
-          <div style={{ paddingLeft: 12, marginTop: 4, color: t.fern, whiteSpace: 'pre-wrap' }}>{b.body || ''}</div>
-        </details>
-      );
-    case 'divider':
-      return <div style={{ height: 1, background: t.clay, margin: '14px 0' }} />;
-    case 'image':
-      return b.url ? (
-        <div style={{ margin: '10px 0' }}>
-          <img src={b.url} alt={b.content || ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
-          {b.content && <div style={{ fontSize: 12.5, color: t.fern, marginTop: 6, textAlign: 'center' }}>{b.content}</div>}
-        </div>
-      ) : null;
-    case 'table': {
-      const rows = b.rows || [];
-      return (
-        <table style={{ borderCollapse: 'collapse', width: '100%', margin: '12px 0' }}>
-          <tbody>
-            {rows.map((row, r) => (
-              <tr key={r}>
-                {row.map((cell, c) => (
-                  <td key={c} style={{ border: `1px solid ${t.clay}`, padding: '6px 8px', background: r === 0 ? t.clay : 'transparent', fontWeight: r === 0 ? 600 : 400 }}>
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
-    }
-    case 'embed': {
-      if (!b.url) return null;
-      const { kind, embedSrc, ratio } = parseEmbedUrl(b.url);
-      if (kind === 'generic') {
-        return (
-          <a href={b.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', border: `1px solid ${t.clay}`, borderRadius: 8, padding: '12px 14px', margin: '10px 0', color: t.bark, textDecoration: 'none' }}>
-            {b.url}
-          </a>
-        );
-      }
-      return (
-        <div style={{ position: 'relative', width: '100%', paddingTop: ratio || '30%', borderRadius: 8, overflow: 'hidden', margin: '10px 0' }}>
-          <iframe src={embedSrc} title="embed" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} allowFullScreen />
-        </div>
-      );
-    }
-    case 'page-link':
-      return (
-        <div style={{ display: 'flex', gap: 8, padding: '8px 12px', border: `1px dashed ${t.clay}`, borderRadius: 8, margin: '8px 0', color: t.fern, fontSize: 13 }}>
-          <span>📄</span>
-          <span>Página enlazada (no disponible en este link)</span>
-        </div>
-      );
-    case 'text':
-    default: {
-      // The shared view doesn't have the rest of the workspace to resolve mentions
-      // against, so [[Title]] just becomes plain "Title" text here — clean, not raw syntax.
-      const cleanContent = b.content ? b.content.replace(/\[\[([^[\]]+)\]\]/g, '$1') : '';
-      return cleanContent ? <div style={{ marginBottom: 4, lineHeight: 1.7 }}>{cleanContent}</div> : <div style={{ height: 20 }} />;
-    }
-  }
 }
 
 
