@@ -691,6 +691,16 @@ Ver `DISENO_MONETIZACION.md` para el diseño completo.
 
 ---
 
+## v0.54 — Flag de administrador
+
+- **`008_admin.sql`:** columna `profiles.is_admin`, separada del plan a propósito — `plan` es de qué suscripción pagás, `is_admin` es de si sos el dueño/operador de Glenwyn. Se le otorga `is_admin = true` y `plan = 'business'` a `dseiler.dev@gmail.com`
+- El sidebar y el panel de Ajustes muestran "Administrador" en vez del plan cuando corresponde
+- **`DISENO_MONETIZACION.md` actualizado:** el ejemplo de trigger de límites ahora chequea `is_admin` primero — un administrador nunca debería toparse con ningún límite de plan cuando esos triggers se construyan de verdad en el Paso 4
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

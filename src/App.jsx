@@ -190,7 +190,7 @@ function Glenwyn({ user }) {
         setProfile(
           profileResult.status === 'fulfilled'
             ? profileResult.value
-            : { userId: user.id, plan: 'free', stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null }
+            : { userId: user.id, plan: 'free', isAdmin: false, stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null }
         );
         if (profileResult.status === 'rejected') {
           console.error('Glenwyn: failed to load profile (falling back to free plan locally)', profileResult.reason);
@@ -2122,7 +2122,7 @@ function Glenwyn({ user }) {
           </button>
           {profile && sidebarOpen && (
             <div
-              title="Tu plan actual"
+              title={profile.isAdmin ? 'Tenés acceso completo, sin límites de plan' : 'Tu plan actual'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2135,8 +2135,8 @@ function Glenwyn({ user }) {
                 letterSpacing: '0.03em',
               }}
             >
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: profile.plan === 'free' ? t.fern : t.sun }} />
-              Plan {profile.plan}
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: profile.isAdmin ? t.moss : profile.plan === 'free' ? t.fern : t.sun }} />
+              {profile.isAdmin ? 'Administrador' : `Plan ${profile.plan}`}
             </div>
           )}
           <button
@@ -3155,10 +3155,15 @@ function Glenwyn({ user }) {
               Cuenta
             </div>
             <div style={{ fontSize: 13.5, color: t.bark, marginBottom: 4 }}>{user.email || user.phone || 'Tu cuenta'}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.fern, marginBottom: 10 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: profile?.plan === 'free' || !profile ? t.fern : t.sun }} />
-              Plan {profile?.plan || 'free'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.fern, marginBottom: profile?.isAdmin ? 2 : 10 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: profile?.isAdmin ? t.moss : profile?.plan === 'free' || !profile ? t.fern : t.sun }} />
+              {profile?.isAdmin ? 'Administrador' : `Plan ${profile?.plan || 'free'}`}
             </div>
+            {profile?.isAdmin && (
+              <div style={{ fontSize: 11, color: t.fern, marginBottom: 10 }}>
+                Acceso completo a todas las funciones, sin límites de plan.
+              </div>
+            )}
             <button
               onClick={() => supabase.auth.signOut()}
               className="glenwyn-focus"

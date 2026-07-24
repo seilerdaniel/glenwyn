@@ -14,6 +14,7 @@ function rowToProfile(row) {
   return {
     userId: row.user_id,
     plan: row.plan,
+    isAdmin: !!row.is_admin,
     stripeCustomerId: row.stripe_customer_id,
     stripeSubscriptionId: row.stripe_subscription_id,
     currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end).getTime() : null,

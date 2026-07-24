@@ -53,16 +53,22 @@ Esto por sí solo se puede saltear (cualquiera con conocimientos técnicos podr�
 
 **Nivel 2 — en el servidor (el que de verdad importa)**
 
-El límite real tiene que estar en Postgres, vía un trigger que corre antes de cualquier inserción:
+El límite real tiene que estar en Postgres, vía un trigger que corre antes de cualquier inserción. **Importante:** siempre chequea `is_admin` primero — un administrador nunca debería toparse con un límite, sin importar qué plan tenga asignado:
 
 ```sql
 create or replace function public.check_database_limit()
 returns trigger as $$
 declare
   user_plan text;
+  user_is_admin boolean;
   database_count int;
 begin
-  select plan into user_plan from public.profiles where user_id = new.user_id;
+  select plan, is_admin into user_plan, user_is_admin from public.profiles where user_id = new.user_id;
+
+  if user_is_admin then
+    return new; -- los administradores nunca chocan con ningún límite
+  end if;
+
   select count(*) into database_count from public.databases where user_id = new.user_id;
 
   if user_plan = 'free' and database_count >= 1 then
@@ -77,6 +83,8 @@ create trigger enforce_database_limit
   before insert on public.databases
   for each row execute function check_database_limit();
 ```
+
+**`is_admin` es un concepto separado de `plan`, a propósito** (agregado en `008_admin.sql`): `plan` es de qué suscripción pagás (o no); `is_admin` es de si sos el dueño/operador de Glenwyn. Un administrador tiene el flag en `true` y, además, se le asigna el plan más alto (`business`) para que cualquier feature exclusiva de un plan también se vea habilitada en la interfaz — pero el chequeo de seguridad real, en cualquier trigger futuro, siempre tiene que mirar `is_admin` primero, no solo el plan.
 
 Con esto, aunque alguien se salte la interfaz por completo, Postgres mismo rechaza el intento.
 
