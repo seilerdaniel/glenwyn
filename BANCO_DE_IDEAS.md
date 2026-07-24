@@ -172,11 +172,21 @@ El paso "Expresar" en su forma más ambiciosa: un flujo guiado que ayuda a tomar
 
 ## G. Enfoque y ritmo
 
-### 41. Modo enfoque con temporizador 🟢
-Un temporizador tipo Pomodoro que, mientras corre, oculta todo menos el bloque en el que estás escribiendo — coherente con la identidad calma de Glenwyn.
+### 41. Modo enfoque con temporizador 🟢 — ✅ construido como "Modo Deep Work" (v0.51)
+Un temporizador (25/50/90 min) que, mientras corre, oculta todo menos lo que estás escribiendo. Mutuamente excluyente con Modo Zen.
 
-### 42. Modo "solo esto existe" 🟢
-Versión más radical: mientras escribís, se desactiva por completo la navegación (sin sidebar, sin búsqueda). Ataca el fracaso más común de un second brain: terminás organizando en vez de crear.
+**Pendiente para diferenciarlo mejor de Modo Zen (recomendaciones guardadas, sin implementar todavía):**
+1. **Acento de color propio** — usar el tono ámbar (`sun`) en la cuenta regresiva y el botón flotante, en vez de compartir el verde musgo de Zen. El cambio más barato de los seis
+2. **Preguntar la intención antes de empezar** — una sola línea, *"¿Qué vas a lograr en esta sesión?"*, antes de arrancar el temporizador. Zen nunca pregunta nada; Deep Work sí, porque el punto es un compromiso con un objetivo, no solo silencio
+3. **Cierre con reflexión, no solo "se acabó el tiempo"** — al terminar, un mensaje breve tipo *"Sesión completa. ¿Cómo te fue?"* con un campo opcional de una línea que se guarda como nota fechada. Conecta con el "ritual de cierre del día" (#26) ya documentado
+4. **Contador de sesiones del día** — algo chico tipo "3 sesiones hoy", el ángulo de logro que es propio de Deep Work y no tendría sentido en Zen
+5. **Barra de progreso sutil arriba de la pantalla** — una línea fina que se va llenando con el tiempo, en vez de solo el número en la esquina — señal visual de "esto tiene un final", que Zen (abierto, sin final) no necesita
+6. **Sugerir un descanso al terminar** — 5 minutos antes de la próxima sesión, la parte de la técnica Pomodoro que casi nadie respeta pero es la que más importa
+
+Recomendación si se retoma: empezar por #1 (gratis) y #2+#3 juntos (son los que más le dan un propósito distinto a Deep Work en vez de ser "Zen con reloj").
+
+### 42. Modo "solo esto existe" 🟢 — ✅ construido como "Modo Zen" (v0.51, renombrado de "modo enfoque")
+Mientras escribís, se desactiva por completo la navegación (sidebar y barra superior ocultos). Ataca el fracaso más común de un second brain: terminás organizando en vez de crear. Un botón flotante discreto (o `Esc`) para salir.
 
 ### 43. Modo susurro 🟢
 Las sugerencias de Glenwyn (patrones, huérfanas, vínculos posibles) no interrumpen mientras escribís — se juntan en un resumen diario o semanal que revisás cuando vos querés.
@@ -204,6 +214,56 @@ En vez de un chat propio dentro de Glenwyn, exponer tu workspace como fuente de 
 Alguien abre tu link compartido en otro idioma y ve la opción de traducir esa página puntual, al vuelo, sin guardar la traducción en ningún lado.
 
 ---
+
+## I. Recomendaciones de la sesión — salud del código y features importantes
+
+No son ideas de feature nuevas al estilo del resto del documento — son una lectura de conjunto de qué necesita Glenwyn ahora que ya tiene bases de datos completas, Zen/Deep Work, y la mayoría del banco de ideas de bajo esfuerzo construido.
+
+### ⚠️ Prioridad más alta — no es una feature
+**`App.jsx` ya tiene más de 6000 líneas.** Ya se había anotado en la auditoría de calidad de código (cuando tenía 4117 líneas) que convenía dividirlo, y se pospuso por el riesgo. Hoy es 50% más grande. Recomendación concreta para la próxima sesión grande: dividir en módulos (un archivo por componente grande — `DatabaseView`, `TasksView`, los bloques, etc.) *antes* de seguir agregando features, no porque algo esté roto hoy, sino porque cada tanda nueva lo hace más frágil de tocar y más propenso a que un archivo se corte al copiarlo.
+
+### 1. Tests automáticos para la lógica más delicada 🟡
+Ya se encontraron a mano dos bugs sutiles (`Number(null) === 0` enmascarando un ciclo en rollups; un cierre obsoleto de `inboxPageId`). Ese tipo de bug es justo lo que un test unitario chico atrapa solo. No hace falta una suite enorme — 15-20 tests sobre `pageUtils.js` (fechas recurrentes, resolución de rollups, detección de menciones) cubrirían la parte más propensa a errores silenciosos.
+
+### 2. Paleta de comandos ampliada 🟡
+Ya estaba en la lista original de 20 ideas, nunca se construyó. Ahora hay muchísimos atajos escondidos (Zen, Deep Work, captura rápida, extraer a nota) que solo viven en el panel de ayuda. Un `⌘K` que además de buscar páginas también *ejecute acciones* haría descubrible todo lo que ya existe.
+
+### 3. Backup completo del workspace 🟡
+Hoy se exporta una página a la vez. Con bases de datos, relaciones, y todo el resto ya adentro, un solo botón "exportar todo" a un `.zip` con Markdown + imágenes da tranquilidad real de que los datos no quedan atrapados.
+
+### 4. Búsqueda semántica 🟠
+Sigue siendo la pieza de mayor impacto sin construir de todo el banco — la diferencia entre "buscador de texto literal" y "second brain de verdad". Requiere la conversación de privacidad ya documentada (embeddings a una API externa).
+
+### 5. Re-auditoría de accesibilidad 🟡
+Desde la última auditoría completa se agregaron tablas de bases de datos, tablero, calendario, galería, y los modos Zen/Deep Work — mucha superficie nueva sin pasar por el mismo filtro que el resto de la app.
+
+## J. Ideas nuevas — relevantes recién ahora que existen bases de datos
+
+### 50. Exportar una base de datos a CSV 🟢
+Hoy se exporta una página a Markdown, pero un registro con propiedades reales pide claramente un CSV, no Markdown — alguien va a querer sacar esos datos a Excel/Sheets tarde o temprano.
+
+### 51. Importar CSV para crear registros en lote 🟡
+La contraparte del anterior. Antes de que existieran las bases de datos esto no tenía sentido; ahora es la forma natural de arrancar una con datos que ya existían en otro lado.
+
+### 52. Navegar atrás/adelante 🟢
+Ya existe el "Recorrido reciente" registrando por dónde pasaste (idea #36, ya construida) — con esos mismos datos, dos botones `‹ ›` en la barra superior para moverte por ese historial son casi gratis.
+
+### 53. Recordatorios de tareas por notificación del navegador 🟡
+Si la pestaña está abierta y una tarea vence hoy, una notificación nativa (Web Notifications API) — sin backend nuevo.
+
+### 54. Una vista de inicio real 🟡
+Hoy la app abre en la última página activa. Una pantalla de bienvenida chica (páginas editadas esta semana, tareas de hoy, alguna estadística simple) le daría a "abrir Glenwyn" una sensación de punto de partida, no de "seguir donde quedé".
+
+## K. Tipos de auditoría todavía no hechos
+
+Ya cubiertas: datos/lógica (5 veces), diseño/UX, seguridad, performance, accesibilidad, SEO. Pendientes, de otra naturaleza:
+
+- **Arquitectura de bases de datos** — el subsistema más nuevo y complejo (relaciones, rollups, ciclos) merece una revisión propia, no asumir que quedó bien solo porque las auditorías generales no la tocaron a fondo
+- **Consistencia de diseño** — componentes construidos en sesiones muy distintas; revisar si espaciados/colores/patrones de botón siguen coherentes o se acumuló deriva
+- **Dependencias** — nunca se corrió un `npm audit` sobre las librerías del proyecto
+- **Escala** — todo probado con un puñado de páginas; simular un workspace con cientos y ver qué empieza a sentirse lento
+- **Mensajes de error** — revisar si cada error le dice al usuario algo específico y útil, o si varios caen en un genérico "algo salió mal"
+- **Resiliencia** — qué pasa si Supabase se pausa, si se pierde acceso a la cuenta de Google, o si el export ya no alcanza como backup real — la pregunta de "peor caso" que nunca se hizo
 
 ## Cómo priorizar cuando llegue el momento
 

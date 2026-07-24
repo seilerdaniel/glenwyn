@@ -402,6 +402,285 @@ Revisión enfocada en las 3 tandas desde la última auditoría de datos (compart
 
 ---
 
+## v0.32 — Login con múltiples métodos
+
+- **Pantalla de login rediseñada por completo:** email + contraseña (con "olvidé mi contraseña" y crear cuenta), Google, Facebook, Microsoft (Azure), y teléfono por SMS
+- Flujo completo de restablecer contraseña, incluyendo la pantalla que aparece al volver desde el link del email
+- El botón "Cerrar sesión" ahora muestra el email o el teléfono según cómo te hayas logueado, en vez de asumir que siempre hay un email (las cuentas por teléfono no tienen uno)
+- Cada proveedor nuevo (Facebook, Microsoft, teléfono) necesita su propia configuración externa antes de funcionar — documentado paso a paso en `CHECKLIST.md`. El de teléfono es el único que además necesita un proveedor de SMS de terceros (Twilio) con costo propio
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.33 — Auditoría UX/UI de la pantalla de login
+
+- **Reordenamiento con base en evidencia real:** los métodos de un click (Google, Facebook, Microsoft, teléfono) ahora van primero — convierten mejor y piden menos esfuerzo que un formulario de contraseña. Email+contraseña quedó como alternativa "o con tu email", no como default
+- **Labels de verdad en cada campo** (antes solo había placeholder, que desaparece al escribir — problema de accesibilidad real)
+- **Mostrar/ocultar contraseña** en todos los campos de contraseña
+- **Botones OAuth con texto**, no solo ícono — con Microsoft en particular, el logo de cuadraditos no se reconoce tan rápido sin la palabra al lado
+- **`autoComplete` en todos los campos**, incluyendo `one-time-code` en el del SMS — permite que el navegador sugiera contraseñas guardadas, y que iOS/Android autocompleten el código recibido por SMS
+- Los botones OAuth ahora se deshabilitan mientras cargan, para que no se puedan clickear varias veces seguidas
+- Mensajes de error con `role="alert"` para que un lector de pantalla los anuncie solo
+- Contraseña mínima subida de 6 a 8 caracteres
+- El formulario ahora vive dentro de una tarjeta con borde y sombra, consistente con el resto de los paneles de Glenwyn (antes flotaba directo sobre el fondo, sin ese tratamiento)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.34 — Auditoría mobile-first de la pantalla de login
+
+Revisión explícita contra 320px de ancho (el punto de referencia clásico para mobile-first), no solo contra un celular grande donde todo entra fácil.
+
+- **Fix real, no cosmético:** los inputs tenían `font-size: 14px` — iOS Safari hace zoom automático en cualquier campo con menos de 16px al tocarlo. Subido a 16px en todos
+- **Botones por debajo del área táctil mínima recomendada** (44×44pt Apple / 48×48dp Material) — ahora todos los botones e inputs tienen `min-height: 44px`
+- El toggle de mostrar/ocultar contraseña tenía un área táctil real de ~20px, la mitad del mínimo, y pegado al borde del campo — ahora ocupa los 44px completos de alto del input
+- **Media query real agregada** (antes todo dependía solo de flexbox, sin ningún breakpoint): en pantallas ≤360px, Facebook y Microsoft pasan de compartir fila a apilarse verticalmente, y el padding de la tarjeta se reduce — a 320px, antes quedaban apretadísimos; ahora cada botón usa el ancho completo
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.35 — Fix mobile: barra superior de la app amontonada
+
+Bug real reportado con captura de pantalla: en mobile, "compartir / exportar / historial / palabras" y el indicador de guardado se amontonaban y se superponían — el mismo problema de "sin estrategia responsive" que ya se había auditado en la pantalla de login, pero nunca se aplicó a esta barra.
+
+- En pantallas angostas, esos 4 elementos se juntan en un solo botón **"⋯ Más acciones"** que abre un menú desplegable — en vez de competir todos por el mismo espacio horizontal
+- El indicador de guardado, que antes podía mostrar un texto largo ("No se pudo guardar. Revisá tu conexión.") justo en el lugar más apretado de toda la barra, ahora es un punto de color compacto en mobile (rojo = error, ámbar = guardando, verde = guardado), con el texto completo disponible al tocarlo
+- El título/breadcrumb ahora trunca correctamente en vez de empujar a los botones de al lado
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.36 — Fix crítico: las páginas nunca se guardaban de verdad
+
+Bug encontrado en producción, con el error real de Postgres en la consola: `invalid input syntax for type uuid: "mnh2lfhl"`.
+
+- **La causa:** la función `uid()` generaba strings cortos (`Math.random().toString(36)`) pensados para IDs de bloques y `key` de React — pero se reutilizaba también para el `id` de cada página, y `pages.id` en Postgres es de tipo `uuid` estricto. Cada intento de guardar una página nueva fallaba con un 400
+- **El impacto real:** ninguna página se guardaba nunca en Supabase — todo vivía solo en el estado local del navegador, por eso siempre volvía a aparecer "Bienvenida" como si nada se hubiera guardado jamás
+- **El fix:** `uid()` ahora genera un UUID real con `crypto.randomUUID()` (el mismo mecanismo que ya se usaba en otras partes del código, como los tokens de compartir). Una sola línea de cambio, sin necesidad de migrar datos — como ninguna página se había guardado exitosamente antes, no hay nada que arreglar del lado de la base
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.37 — Borde visible al seleccionar un bloque
+
+- Los bloques de texto no mostraban ningún indicador visual al hacer click adentro con el mouse — solo se veía algo navegando con `Tab` (`:focus-visible` no se activa con click en la mayoría de los navegadores). Se agregó un borde izquierdo sutil, propio, que sí aparece con click normal — la forma en que la gente edita la mayor parte del tiempo
+- Implementado con `box-shadow` en vez de un `border` real, para que no empuje ni desplace el texto ni un píxel al aparecer/desaparecer
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.38 — Fix: Enter y duplicar bloque no movían el foco
+
+Bug real reportado con captura de pantalla: escribir, apretar Enter, y en vez de pasar al bloque nuevo, el cursor se quedaba en el mismo — cada Enter de más solo apilaba otro bloque vacío abajo sin moverse nunca ahí.
+
+- **`addBlock` (Enter para crear un bloque nuevo):** nunca movía el foco al bloque recién creado. Ahora sí, con el mismo mecanismo (`blockRefs` + `requestAnimationFrame`) que ya usaba `deleteBlock` para volver al bloque anterior al borrar
+- **`duplicateBlock` (⌘/Ctrl+D):** mismo bug exacto, mismo fix — encontrado al revisar si había más lugares con el mismo patrón antes de que alguien lo reportara por separado
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.39 — Páginas "hub" (vínculos dorados)
+
+Idea #24 del banco de ideas — la de menor esfuerzo con impacto real: destacar visualmente qué páginas son las más conectadas del workspace, sin ninguna IA.
+
+- Un punto dorado sutil junto al título, en el árbol del sidebar, para las páginas referenciadas por **3 o más** (bloque de link o mención inline, cuenta cualquiera de los dos)
+- `getBacklinkCounts()` calcula todos los conteos en **una sola pasada** sobre el workspace, no llamando a `getBacklinks()` en un loop por cada página — eso hubiera sido O(n²) sin necesidad
+- Al pasar el mouse por el punto, un tooltip dice cuántas páginas la referencian
+- 100% del lado del cliente, cero infraestructura nueva — reutiliza exactamente los backlinks que ya existían
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.40 — Mini-mapa de vecinos (vista de grafo, versión chica)
+
+La versión liviana de "vista de grafo" del roadmap — en vez del grafo completo del workspace (🔴, un proyecto en sí mismo), el mini-mapa local (🟢) que ya estaba priorizado como mejor punto de partida.
+
+- **`getOutgoingLinks()`:** la pieza que faltaba — hasta ahora solo existían los backlinks (quién te menciona a vos), nunca el sentido contrario (a quién mencionás vos). Necesario para que el mapa tenga las dos direcciones
+- Al final de cada página, un diagrama SVG chico (sin ninguna librería de layout) con hasta 7 vecinos directos — quién te referencia (punto ámbar) y a quién referenciás (punto verde musgo), cada uno clickeable para saltar directo
+- Mismo lugar que el panel "Referenciado por" — nunca aparece en la vista pública compartida, por la misma razón de privacidad (no filtrar la estructura del resto del workspace a un visitante anónimo)
+- Deliberadamente NO es el grafo completo del workspace — mostrar solo los vecinos directos de la página que estás mirando es más útil en el momento, y muchísimo más barato de construir
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.41 — Bases de datos estilo Notion (Fase A)
+
+Arranca la Fase 3 del roadmap — el proyecto grande que ya tenía su propio documento de diseño. Esta primera fase: una sola vista de tabla, tipos de propiedad básicos, sin relaciones todavía (eso es Fase C).
+
+- **`006_databases.sql`:** tablas `databases` (esquema de propiedades) y `database_views` (para cuando existan más vistas que tabla), más `database_id`/`properties` en `pages`. RLS completo en las dos tablas nuevas
+- **La decisión central del diseño, aplicada tal cual:** un registro de base de datos es simplemente una página normal con `parentId` apuntando a la página-base-de-datos — hereda papelera, historial de versiones e íconos gratis, sin código adicional
+- **Crear una:** opción "🗄 Base de datos" en el selector de plantillas. La página se guarda directamente en Postgres *antes* de crear el registro en `databases` — si no, la relación de llave foránea fallaría porque la página todavía no existiría del lado del servidor
+- **`DatabaseTableView`:** columnas editables (nombre, tipo, quitar), 5 tipos de propiedad (texto, número, selección, fecha, casilla), agregar/eliminar filas, abrir cualquier registro como página completa con su propio contenido de bloques
+- Los cambios de esquema (agregar/renombrar/quitar una propiedad) se guardan al instante, no por el autoguardado debounced normal — son cambios estructurales poco frecuentes, no vale la pena esperar
+
+**Fuera de alcance a propósito en esta fase** (documentado desde el diseño original): vistas de tablero/calendario (Fase B), relaciones y rollups entre bases de datos (Fase C), plantillas de registro y fórmulas (Fase D, la última probablemente ni se construya).
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.42 — Bases de datos: Fase B (tablero + calendario)
+
+Sin ningún cambio de esquema — exactamente como estaba planeado en el diseño original: las tres vistas muestran los mismos registros, solo cambia cómo se organizan.
+
+- **Selector de vistas** (Tabla / Tablero / Calendario) arriba de cada base de datos, con pestañas
+- **Tablero:** agrupa por la primera propiedad de tipo "Selección" que tenga la base de datos — columnas tipo kanban, "+ agregar" en cada columna crea un registro con ese valor ya puesto. Si la base de datos no tiene ninguna propiedad de selección, lo dice claro en vez de adivinar
+- **Calendario:** agrupa por la primera propiedad de tipo "Fecha" — grilla mensual con navegación ‹ ›, hasta 3 registros visibles por día ("+N más" si hay más), click en un día agrega un registro con esa fecha ya puesta. Deliberadamente una agenda simple, no un widget de scheduling completo
+- La elección de vista se recuerda por base de datos mientras la sesión sigue abierta (no persiste todavía entre sesiones — quedaría para cuando se implemente `database_views` a fondo)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.43 — Bases de datos: Fase C (relaciones + rollups)
+
+La pieza más compleja del diseño original — y la única de las 4 fases que traía un riesgo anotado desde el principio: los rollups pueden formar ciclos (rollup A depende de rollup B que depende de rollup A).
+
+- **Propiedades de tipo "Relación":** conectan registros de una base de datos con registros de otra — el valor es simplemente un array de IDs de página, mostrado como chips con un checklist para agregar/quitar
+- **Propiedades de tipo "Rollup":** agregan (contar, sumar, promediar) una propiedad de los registros relacionados a través de una relación — de solo lectura, siempre calculado al mostrar, nunca guardado
+- **Protección contra ciclos, probada con un caso real:** armé un escenario de prueba con dos rollups que dependen uno del otro (A→B→A) — la primera versión detectaba el ciclo en el nivel más profundo de la recursión, pero `Number(null) === 0` en JavaScript hacía que el error se perdiera al burbujear hacia arriba, mostrando "0" en silencio en vez de señalar el problema. Corregido propagando el error explícitamente en cada nivel, no solo en el que lo detecta
+- Encabezado de columna con la configuración inline: para una relación, elegís con qué base de datos conectar; para un rollup, elegís a través de qué relación, qué propiedad de los registros relacionados, y cómo agregarla
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.44 — Bases de datos: Fase D (plantillas + galería) — cierra el proyecto de bases de datos
+
+Última fase del documento de diseño original. Con esto, las 4 fases planeadas hace varias tandas ya están todas construidas.
+
+- **Plantillas para registros nuevos, versión simple:** en vez de un sistema de plantillas con nombre separado, cada propiedad puede tener un **valor por defecto** que se aplica solo a todo registro nuevo — un select "Prioridad" que arranca en "Media", una casilla que arranca marcada, una fecha que arranca en "hoy". Si el tablero o el calendario ya le pasan un valor explícito al crear (por ejemplo, la columna donde tocaste "+ agregar"), ese valor explícito siempre gana sobre el default
+- **Vista de galería:** tarjetas en grilla con las propiedades como badges chicos, para hojear registros de un vistazo en vez de scrollear una tabla ancha de lado a lado
+- **Fórmulas: deliberadamente afuera**, tal como decía el diseño original desde el principio — construir un motor de expresiones propio (con su propio lenguaje, parser, y validación) es un proyecto en sí mismo, no una fase más de este
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.45 — Notas huérfanas
+
+Idea #16 del banco de ideas — de las de menor esfuerzo, sin ninguna dependencia de IA.
+
+- **`getOrphanPages()`:** reutiliza el mismo `getBacklinkCounts()` de las páginas hub — cualquier página con cero backlinks es huérfana, calculado en la misma pasada, cero costo extra
+- Nueva vista en el sidebar ("🝓 Notas huérfanas", con contador) — mismo patrón visual y de estado que "Mis tareas", incluida la exclusión mutua entre las dos (abrir una cierra la otra) y el mismo tratamiento en la barra superior (título, oculta los botones específicos de página)
+- A propósito **no es una lista de tareas pendientes** — el texto de la vista aclara que no hace falta conectarlas todas, es solo para saber cuáles existen sin red antes de decidir enlazarlas, archivarlas, o dejarlas así
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.46 — Extraer a nota atómica
+
+Idea #15 del banco de ideas — reduce la fricción de practicar Zettelkasten de verdad a un solo atajo, en vez de copiar/crear página/pegar/enlazar a mano.
+
+- Seleccionás texto dentro de un párrafo → `⌘/Ctrl+Shift+E` → se crea una página nueva con ese texto, y donde estaba la selección queda una mención `[[Título]]` enlazada, vía el mismo sistema de menciones que ya existe
+- El título de la página nueva se toma de la primera línea del texto seleccionado, truncado si es muy largo
+- Se queda en la página de origen — no navega a la nueva, para no interrumpir en qué estabas trabajando
+- Agregado a la ayuda de atajos (`?`) para que sea descubrible, ya que no tiene ningún botón visible
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.47 — Bandeja de entrada
+
+Idea #14 del banco de ideas — la distinción de Zettelkasten entre notas fugaces y permanentes, hecha herramienta concreta.
+
+- Una página "Bandeja de entrada" que se crea sola la primera vez, recordada por ID en las preferencias locales del dispositivo — **sin ninguna migración nueva**
+- Botón propio en el sidebar para ir directo, y un atajo global **`⌘/Ctrl+Shift+I`** que funciona desde cualquier lugar de la app: te lleva a la bandeja y deja el cursor listo para escribir, en un solo paso
+- **Bug real encontrado y arreglado antes de llegar a producción:** el `useEffect` de atajos globales solo se registra una vez al montar la app (dependencias `[]`), así que la función de captura rápida hubiera quedado con un cierre obsoleto de `inboxPageId` — siempre `null`, el valor inicial, nunca hubiera andado. Se arregló con el mismo patrón de `ref` que el código ya usa para mantener `pages`/`activeId` frescos dentro de cierres de larga duración (`inboxPageIdRef`)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.48 — Indicador de madurez de una nota
+
+Idea #17 del banco de ideas — de las de menor esfuerzo, cero campos manuales que mantener.
+
+- **`getPageMaturity()`:** calcula la etapa Zettelkasten de cada página a partir de señales que ya existen — sin backlinks todavía = "fugaz"; con backlinks pero menos de 40 palabras = "en proceso"; con backlinks y contenido sustancial = "permanente"
+- Un punto de color chico antes del ícono de cada página en el sidebar (verde = permanente, ámbar = en proceso) — **fugaz no muestra nada a propósito**, ya que es el estado por defecto de casi toda página nueva y marcarlo siempre sería puro ruido visual sin agregar información
+- Cero campo nuevo que llenar a mano — se recalcula solo con cada cambio, como los backlinks y las páginas hub
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.49 — Rastro de navegación
+
+Idea #36 del banco de ideas — de las de menor esfuerzo.
+
+- Nueva sección "Recorrido reciente" en el sidebar, arriba de Favoritos: las últimas 5 páginas que visitaste esta sesión, sin repetir, sin la que tenés abierta ahora mismo
+- Deliberadamente **no es el árbol fijo** — es tu camino real saltando de mención en mención o de backlink en backlink, para volver sobre tus pasos después de una sesión de investigación larga
+- Solo dura la sesión (no se guarda entre visitas) — es un rastro de "recién estuve acá", no un historial permanente
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.50 — Pátina del tiempo
+
+Idea #33 del banco de ideas.
+
+- **`getPageAge()`:** a partir de `updatedAt` (o `createdAt` si nunca se editó), clasifica cada página en reciente / envejeciendo (30+ días sin tocar) / vieja (90+ días)
+- Las páginas envejeciendo y viejas se ven un poco más apagadas en el sidebar (opacidad reducida) — no es una advertencia de "desactualizado", es más parecido a cómo se ve una foto vieja
+- A propósito **nunca se aplica a la página que tenés abierta en ese momento** — verla apagada mientras la estás mirando y editando sería confuso, no cálido
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.51 — Modo Zen (renombrado) + Modo Deep Work
+
+Idea #42 del banco de ideas, renombrada a pedido a "Modo Zen", más una versión nueva con temporizador.
+
+- **Modo Zen** (antes "modo enfoque") — mismo comportamiento de siempre, solo el nombre visible cambió, en la UI y en la ayuda de atajos
+- **Modo Deep Work:** la misma idea, pero con temporizador — elegís 25/50/90 minutos desde un botón nuevo en el sidebar, y mientras corre se ve la cuenta regresiva en el mismo botón flotante que antes solo decía "salir del Zen". Termina sola cuando se acaba el tiempo, sin depender de que te acuerdes de salir
+- Los dos modos son mutuamente excluyentes — activar uno corta el otro, nunca quedan superpuestos
+- `Esc` sigue sirviendo para salir de cualquiera de los dos en cualquier momento
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.52 — División de `App.jsx` + tabla `profiles` (Pasos 1 y 2 de monetización)
+
+### Refactor: `App.jsx` dividido en 7 archivos
+Pasó de 6191 a 3194 líneas (**-48%**), en 6 extracciones seguras, cada una compilada y con lint limpio antes de commitear:
+
+| Archivo nuevo | Contenido |
+|---|---|
+| `src/theme.js` | Tokens de color y fuentes |
+| `src/components/SharedPageView.jsx` | Vista pública compartida |
+| `src/components/DatabaseViews.jsx` | Tabla/tablero/calendario/galería + celdas |
+| `src/components/SecondBrainViews.jsx` | Mis tareas/huérfanas/mini-mapa |
+| `src/components/SidebarViews.jsx` | `PageRow`/`IconPicker`/`EmptyState` |
+| `src/components/SpecializedBlocks.jsx` | Imagen/tabla/embed/link/menú `/` |
+| `src/components/Block.jsx` | El editor de bloque principal |
+
+De paso se encontró y arregló una duplicación real: `truncateLabel` estaba definido dos veces en componentes distintos — ahora vive una sola vez en `pageUtils.js`. Lo que queda en `App.jsx` es el componente `Glenwyn` — el núcleo con todo el estado y los handlers, deliberadamente no dividido más allá de esto por el riesgo de tocar algo tan interconectado para un beneficio marginal.
+
+### Paso 2 de monetización: tabla `profiles`
+Ver `DISENO_MONETIZACION.md` para el diseño completo.
+
+- **`007_profiles.sql`:** tabla `profiles` (plan Free/Plus/Business + metadata de Stripe para más adelante), con un trigger que crea el perfil automáticamente para cualquier usuario nuevo, sin importar qué método de login use
+- **Backfill incluido en la misma migración** para cuentas que ya existían antes de correrla — ninguna cuenta se queda sin perfil
+- La app carga el perfil junto con páginas y bases de datos al iniciar sesión, con un plan "free" local de respaldo si por algún motivo la fila todavía no existe (nunca rompe la carga de la app por esto)
+- Indicador discreto del plan actual en el sidebar — **todavía sin Stripe conectado y sin ningún límite activo**, eso queda para los pasos 3 y 4
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 
