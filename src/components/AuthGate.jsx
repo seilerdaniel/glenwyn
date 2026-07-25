@@ -160,10 +160,28 @@ export default function AuthGate({ children }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  // Bug conocido de supabase-js/auth-js: después de un login OAuth, el hash de
+  // la URL (#access_token=...&refresh_token=...) a veces no se limpia solo, por
+  // una condición de carrera entre el evento de login y el momento en que la
+  // librería intenta reescribir la URL. Dejar esos tokens visibles en la barra
+  // de direcciones es un riesgo real (quedan en el historial del navegador, se
+  // pueden compartir por accidente al copiar el link) — así que se limpia acá
+  // de forma explícita, apenas se confirma la sesión, sin depender de que la
+  // librería lo haga por su cuenta.
+  const stripAuthTokensFromUrl = () => {
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session) stripAuthTokensFromUrl();
+    });
     const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      if (newSession) stripAuthTokensFromUrl();
       // Supabase redirects back here after a password-reset email link with this event.
       if (event === 'PASSWORD_RECOVERY') setMode('reset-password');
     });

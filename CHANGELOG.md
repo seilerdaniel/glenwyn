@@ -901,6 +901,18 @@ Reemplaza el verde/tierra original por dorado como acento principal — elegida 
 
 ---
 
+## v0.71 — 🔒 Fix de seguridad: tokens de OAuth quedaban visibles en la URL
+
+Encontrado en producción: después de iniciar sesión con Google, el `access_token`, `refresh_token`, y el token de Google quedaban pegados en la URL (`#access_token=...`) de forma persistente, en vez de limpiarse apenas se confirmaba la sesión.
+
+- **Causa: un bug conocido y documentado de `supabase-js`/`auth-js`** (no algo específico de esta configuración) — una condición de carrera entre el momento en que se dispara el evento de login y el momento en que la librería intenta reescribir la URL para sacar el hash
+- **Fix:** se fuerza la limpieza manualmente, apenas se confirma la sesión (tanto en la carga inicial como en cada evento de `onAuthStateChange`), sin depender de que la librería lo haga por su cuenta
+- **Por qué importaba de verdad:** esos tokens quedaban en el historial del navegador, y alguien podría compartir el link por accidente (copiar la URL, mandarla por chat) exponiendo su propia sesión
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 
