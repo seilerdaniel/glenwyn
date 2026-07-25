@@ -103,6 +103,7 @@ Este es el único que necesita un servicio de terceros pago para enviar los SMS 
 ## 7. Opcional — endurecer seguridad (recomendado, no bloqueante)
 
 - [ ] En Supabase → Settings → API, activar el rate limiting para la función RPC `get_shared_page` y para el bucket `glenwyn-images`, como capa extra de defensa contra abuso
+- [ ] **Configurar SMTP propio antes de cualquier lanzamiento con gente real** (Authentication → Emails → SMTP Settings). El SMTP por defecto de Supabase solo manda **2 emails de auth por hora** (confirmación de cuenta, restablecer contraseña) — con una ola de interés real, la mayoría de la gente ni siquiera llegaría a confirmar su cuenta. Cualquier proveedor sirve (Resend, SendGrid, AWS SES) — es gratis armar la cuenta y conectar las credenciales
 
 ---
 

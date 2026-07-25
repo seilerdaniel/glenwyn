@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { Eye, EyeOff, Smartphone } from 'lucide-react';
+const LandingPage = React.lazy(() => import('./LandingPage'));
 
-const canvas = '#F6F3EC';
-const canvasAlt = '#EFEAE0';
-const bark = '#2E2A24';
-const fern = '#7C8B6F';
-const moss = '#4A5D45';
-const clay = '#E8E2D3';
-const errorColor = '#994530';
+const canvas = '#FCF6EA';
+const canvasAlt = '#F5EAD3';
+const bark = '#362916';
+const fern = '#7A6647';
+const moss = '#8C5F1E';
+const clay = '#EEDFBE';
+const errorColor = '#A8432E';
 
 // Traduce los mensajes de error más comunes de Supabase Auth a algo legible.
 function translateError(message) {
@@ -113,7 +115,7 @@ function EyeToggle({ visible, onToggle }) {
         fontSize: 14,
       }}
     >
-      {visible ? '🙈' : '👁'}
+      {visible ? <EyeOff size={17} strokeWidth={1.75} /> : <Eye size={17} strokeWidth={1.75} />}
     </button>
   );
 }
@@ -146,8 +148,8 @@ function PasswordField({ id, label, value, onChange, placeholder, autoComplete, 
 // Renders children with `user` once there's a signed-in session.
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
-  // signin | signup | forgot | phone | phone-otp | reset-password
-  const [mode, setMode] = useState('signin');
+  // landing | signin | signup | forgot | phone | phone-otp | reset-password
+  const [mode, setMode] = useState('landing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
@@ -282,6 +284,14 @@ export default function AuthGate({ children }) {
     return children(session.user);
   }
 
+  if (mode === 'landing') {
+    return (
+      <Suspense fallback={null}>
+        <LandingPage onLogin={() => switchMode('signin')} onSignup={() => switchMode('signup')} />
+      </Suspense>
+    );
+  }
+
   const Feedback = () => (
     <div role="alert" aria-live="polite">
       {error && <div style={{ color: errorColor, fontSize: 12.5, marginTop: 12 }}>{error}</div>}
@@ -316,7 +326,16 @@ export default function AuthGate({ children }) {
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <div style={{ fontSize: 22, fontWeight: 600, color: moss, marginBottom: 6 }}>Glenwyn</div>
+          {mode === 'reset-password' ? (
+            <div style={{ fontSize: 22, fontWeight: 600, color: moss, marginBottom: 6 }}>Glenwyn</div>
+          ) : (
+            <button
+              onClick={() => switchMode('landing')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, fontWeight: 600, color: moss, marginBottom: 6, fontFamily: 'inherit' }}
+            >
+              Glenwyn
+            </button>
+          )}
           <div style={{ fontSize: 13, color: fern }}>Un espacio de trabajo tranquilo, esperándote.</div>
         </div>
 
@@ -358,7 +377,7 @@ export default function AuthGate({ children }) {
                 </button>
               </div>
               <button onClick={() => switchMode('phone')} disabled={!!oauthLoading} style={oauthButtonStyle(!!oauthLoading)}>
-                📱 Continuar con teléfono
+                <Smartphone size={16} strokeWidth={1.75} /> Continuar con teléfono
               </button>
             </div>
 

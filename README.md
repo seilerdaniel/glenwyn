@@ -10,7 +10,7 @@ Un espacio de trabajo inmersivo y distraction-free, inspirado en Notion. Cozy, m
 ## Setup
 
 ### 1. Base de datos
-Andá al **SQL Editor** de tu proyecto en supabase.com y corré, en orden, `001_init.sql`, `002_pinned.sql`, `003_page_versions.sql`, `004_storage.sql`, `005_sharing.sql`, `006_databases.sql`, `007_profiles.sql` y `008_admin.sql`. El primero crea la tabla `pages` con Row Level Security habilitado (cada usuario solo ve sus propias páginas); el segundo agrega la columna `pinned` para favoritos; el tercero crea la tabla de historial de versiones; el cuarto crea el bucket de Storage para subir imágenes de verdad; el quinto habilita compartir páginas por link de solo lectura; el sexto agrega las bases de datos estilo Notion; el séptimo agrega el plan de usuario (Free/Plus/Business) para el modelo freemium; el octavo agrega el flag de administrador y se lo otorga a `dseiler.dev@gmail.com`.
+Andá al **SQL Editor** de tu proyecto en supabase.com y corré, en orden, `001_init.sql`, `002_pinned.sql`, `003_page_versions.sql`, `004_storage.sql`, `005_sharing.sql`, `006_databases.sql`, `007_profiles.sql`, `008_admin.sql`, `009_waitlist.sql` y `010_waitlist_hardening.sql`. El primero crea la tabla `pages` con Row Level Security habilitado (cada usuario solo ve sus propias páginas); el segundo agrega la columna `pinned` para favoritos; el tercero crea la tabla de historial de versiones; el cuarto crea el bucket de Storage para subir imágenes de verdad; el quinto habilita compartir páginas por link de solo lectura; el sexto agrega las bases de datos estilo Notion; el séptimo agrega el plan de usuario (Free/Plus/Business) para el modelo freemium; el octavo agrega el flag de administrador y se lo otorga a `dseiler.dev@gmail.com`; el noveno agrega la tabla de interesados para la página de validación de precios; el décimo agrega protección básica contra spam a esa tabla.
 
 El proyecto ya incluye `vercel.json` con un rewrite necesario para que los links de `/share/...` funcionen en producción (sin esto, abrir un link compartido directamente daría 404). Ese mismo rewrite excluye explícitamente `/guia.html`, para que la guía de uso se sirva como archivo estático real en vez de redirigir a la app.
 
@@ -36,7 +36,14 @@ Esto sí necesita un par de pasos, en dos consolas distintas:
 2. Pegá el Client ID y Client Secret del paso anterior
 3. En **Authentication → URL Configuration**, agregá tu dominio de Vercel y `http://localhost:5173` a **Redirect URLs**
 
-### 4. Correr en local
+### 4. Edge Function — eliminar cuenta
+El botón "Eliminar mi cuenta" (Ajustes → Zona de peligro) necesita una Edge Function desplegada, porque borrar un usuario requiere la Service Role Key, que nunca puede vivir en el navegador. Con el [Supabase CLI](https://supabase.com/docs/guides/cli) instalado y logueado:
+```bash
+supabase functions deploy delete-account
+```
+No hace falta configurar ninguna variable de entorno a mano — `SUPABASE_URL`, `SUPABASE_ANON_KEY`, y `SUPABASE_SERVICE_ROLE_KEY` ya están disponibles automáticamente dentro de cualquier Edge Function del proyecto.
+
+### 5. Correr en local
 ```bash
 npm install
 npm run dev
@@ -62,6 +69,8 @@ supabase/migrations/
   006_databases.sql        — tablas databases/database_views + columnas database_id/properties en pages
   007_profiles.sql         — tabla profiles (plan de usuario) + trigger de auto-creación + backfill
   008_admin.sql            — flag is_admin en profiles + se lo otorga a dseiler.dev@gmail.com
+  009_waitlist.sql         — tabla waitlist_signups para la página de validación de precios (/planes)
+  010_waitlist_hardening.sql — email único + formato válido en waitlist_signups (protección básica contra spam)
 ```
 
 ## Features actuales
@@ -81,6 +90,17 @@ supabase/migrations/
 - **Modo Deep Work**: la misma idea que el Modo Zen, pero con temporizador (25/50/90 min) desde el botón "⏱ Deep Work" en el sidebar — se ve la cuenta regresiva en el mismo botón flotante, y termina sola cuando se acaba el tiempo, sin tener que acordarte de salir vos
 - **Plan de usuario** (Free / Plus / Business): infraestructura para el modelo freemium — todavía sin Stripe ni límites activos (ver `DISENO_MONETIZACION.md`), solo un indicador discreto del plan actual en el sidebar
 - **Panel de Ajustes** (⚙ en el sidebar): cuenta, plan actual, modo claro/oscuro, links a privacidad/términos/cookies, y accesos a la guía de uso y los atajos de teclado — todo en un solo lugar
+- **Barra superior consolidada**: Compartir/Exportar/Historial/Ajustes/Atajos ahora viven en un solo menú "⋯", en cualquier tamaño de pantalla — antes se mostraban todos sueltos en desktop, y solo se agrupaban en pantallas angostas
+- **Rediseño de íconos con `lucide-react`** (en curso): sidebar, barra superior, bases de datos, bloques de imagen/embed/link, prioridad/recurrencia/fecha de tareas, callout, y mostrar/ocultar contraseña ya usan íconos de línea vectoriales en vez de emoji — se ven igual en cualquier sistema operativo, a diferencia de los emoji (que Windows renderiza distinto que Mac). Los íconos de página elegidos por el usuario (la paleta de emoji para personalizar páginas) quedan como emoji a propósito — es una función de personalización, no iconografía de la app
+- **Nueva paleta "Miel dorada"**: dorado como acento principal en vez de verde — elegida para diferenciarse de la competencia (ninguno de los competidores directos usa dorado/miel como color de marca). Verificada con contraste real WCAG AA en ambos modos (claro/oscuro) antes de aplicarla — la primera versión de la propuesta fallaba en el texto secundario (2.87:1) y quedaba al límite en los links/botones (3.16:1), corregido oscureciendo esos dos tonos sin perder el matiz dorado
+- **Paleta de comandos** (`⌘/Ctrl+K`): ya no es solo buscador de páginas — ahora también ejecuta acciones (nueva página, nueva base de datos, Bandeja de entrada, Mis tareas, Notas huérfanas, Modo Zen, Deep Work, modo oscuro/claro, Papelera, Ajustes, atajos, y compartir/historial de la página activa), todo mezclado en una sola lista con navegación por flechas ↑↓
+- **Backup completo del workspace** (Ajustes → Datos y privacidad): exporta todas tus páginas a un `.zip` de una sola vez, respetando la jerarquía de carpetas del sidebar, con las imágenes incluidas de verdad (no como links a Supabase que podrían dejar de funcionar algún día)
+- **Página de validación de precios** (`/planes`): pública, sin login, muestra la línea gratis/Plus propuesta y junta emails de interés en `waitlist_signups` — el Paso 3 del plan de monetización, hecho herramienta. Nadie puede leer la lista desde el cliente, ni siquiera quien se anotó — solo vos, desde el Table Editor de Supabase
+- **Landing page pública** antes del login: Hero, 4 secciones de features (notas conectadas, bases de datos, foco real, herramientas de segundo cerebro), comparación de planes, preguntas frecuentes, y footer con los links legales. Aparece como el estado inicial de `AuthGate` — nunca se le muestra a alguien que ya tiene sesión iniciada, y no hay parpadeo mientras se confirma la sesión
+- **Comparación de planes reutilizable** (`PlansComparison.jsx`): la misma tabla Free/Plus vive en la landing y en el panel de Ajustes ("Ver todos los planes") — una sola fuente de verdad para que nunca queden desincronizadas
+- **Eliminar cuenta, de verdad** (Ajustes → Zona de peligro): cierra una brecha real entre lo que prometía `privacidad.html` ("podés eliminar tu cuenta") y lo que el código hacía (nada) — ahora es autoservicio, con confirmación escribiendo "ELIMINAR". Corre en una Edge Function de Supabase (necesita la Service Role Key, que nunca puede vivir en el navegador) que borra las imágenes subidas (lo único que no se limpia solo) y el usuario de `auth.users` (que sí cascada automáticamente sobre páginas, bases de datos, y el perfil)
+- **Bundle principal reducido de 665KB a 551KB**: `jszip`, `LandingPage`, `WaitlistPage`, y `SharedPageView` ahora se cargan de forma diferida (dynamic import) — nadie descarga ese código a menos que realmente exporte un backup, visite `/planes`, `/share/...`, o vea la landing sin sesión iniciada
+- **Protección básica contra abuso en `/planes`**: campo señuelo (honeypot, invisible para personas pero que un bot llena igual), email único (no se puede anotar el mismo dos veces), y validación de formato a nivel de base de datos — la tabla `waitlist_signups` se inserta directo por PostgREST, sin pasar por el rate limiting de Supabase Auth, así que no tenía ninguna defensa hasta ahora
 - **Flag de administrador** (`profiles.is_admin`, separado del plan): tu cuenta (`dseiler.dev@gmail.com`) queda marcada como admin desde `008_admin.sql` — cuando se activen límites reales de plan, un admin siempre los salta, sin importar qué plan tenga asignado
 - **Páginas legales** (`/privacidad.html`, `/terminos.html`, `/cookies.html`): política de privacidad, términos de servicio, y política de cookies, enlazadas desde el panel de Ajustes y desde la pantalla de login. Son un punto de partida razonable, no una revisión legal profesional — conviene una revisión real antes de cobrar dinero de verdad o tener usuarios en la Unión Europea
 - **Bases de datos** (Fase A + B + C + D): un tipo de página nueva con propiedades (texto/número/select/fecha/casilla/**relación**/**rollup**) como columnas — cada fila sigue siendo una página normal por dentro (hereda papelera, historial de versiones e íconos gratis). Cuatro formas de ver los mismos registros: **tabla**, **tablero** (por selección), **calendario** (por fecha), y **galería** (tarjetas con las propiedades como badges). Las **relaciones** conectan registros entre dos bases de datos, los **rollups** agregan (contar/sumar/promediar) una propiedad de los relacionados — con protección contra ciclos si dos rollups dependen uno del otro. Cada propiedad puede tener un **valor por defecto** que se aplica solo a cada registro nuevo. Creá una desde el selector de plantillas ("🗄 Base de datos"). Las fórmulas quedaron deliberadamente afuera — el motor de expresiones propio que necesitarían es un proyecto en sí mismo

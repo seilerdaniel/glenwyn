@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { displayFont, bodyFont, monoFont } from '../theme';
+import { Flag, Calendar as CalendarIcon, Lightbulb } from 'lucide-react';
 import {
   SLASH_COMMANDS,
   detectMarkdownShortcut,
@@ -323,13 +324,13 @@ function Block({
             border: 'none',
             cursor: 'pointer',
             color: priorityColor,
-            fontSize: 13,
             marginTop: 6,
             padding: 0,
             flexShrink: 0,
+            display: 'flex',
           }}
         >
-          ⚑
+          <Flag size={13} strokeWidth={1.75} fill={priorityColor} />
         </button>
         {block.dueDate && (
           <select
@@ -371,7 +372,13 @@ function Block({
             whiteSpace: 'nowrap',
           }}
         >
-          <span>{block.dueDate ? new Date(block.dueDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '📅'}</span>
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            {block.dueDate ? (
+              new Date(block.dueDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+            ) : (
+              <CalendarIcon size={12} strokeWidth={1.75} />
+            )}
+          </span>
           <input
             type="date"
             value={block.dueDate || ''}
@@ -499,7 +506,7 @@ function Block({
           position: 'relative',
         }}
       >
-        <span style={{ fontSize: 16, marginTop: 2 }}>💡</span>
+        <Lightbulb size={16} strokeWidth={1.75} style={{ marginTop: 2, flexShrink: 0 }} color={t.fern} />
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"

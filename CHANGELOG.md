@@ -709,6 +709,179 @@ Bug real encontrado probando en vivo: la primera versión de `008_admin.sql` com
 
 ---
 
+## v0.56 — Re-auditoría de accesibilidad (6ª auditoría)
+
+Enfocada en toda la superficie agregada desde la última auditoría completa: bases de datos (tabla/tablero/calendario/galería), Modo Zen/Deep Work, panel de Ajustes, páginas legales. Primero, un chequeo gratis: `npm audit` sobre las dependencias — **0 vulnerabilidades**.
+
+**4 problemas reales encontrados y arreglados:**
+
+1. **Calendario, tarjetas de tareas del día:** tenían `role="button"` y `tabIndex={0}` pero les faltaba el `onKeyDown` — alguien navegando por teclado llegaba, el lector de pantalla lo anunciaba como botón, pero apretar Enter no hacía nada. Peor que no tener el rol, porque prometía algo que no cumplía
+2. **`RelationCell`, botón de editar relaciones:** cuando ya había relaciones, el botón mostraba solo "✎" sin `aria-label` ni `title` — un lector de pantalla lo anunciaba como "botón" sin decir para qué sirve
+3. **`RelationCell`, popover de relaciones:** solo se podía cerrar tocando de nuevo el mismo botón que lo abrió — sin `Escape`, sin click afuera. Agregado ambos
+4. **Selector de duración de Deep Work:** se cerraba con click afuera pero no con `Escape` — agregado al manejador global, para que sea consistente con el resto de menús de la app
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.57 — Paleta de comandos ampliada
+
+Convierte el `⌘/Ctrl+K` (antes solo buscador de páginas) en una paleta de comandos real, al estilo Linear/Raycast — todos los atajos que se fueron acumulando (Zen, Deep Work, captura rápida, extraer a nota) ya no dependen de que alguien se acuerde de memorizarlos.
+
+- **~13 comandos ejecutables** mezclados con los resultados de búsqueda de páginas en una sola lista: nueva página, nueva base de datos, ir a la Bandeja de entrada, Mis tareas, Notas huérfanas, activar/salir de Modo Zen, iniciar/terminar Deep Work, cambiar tema, Papelera, Ajustes, atajos de teclado, y (si hay una página abierta) compartir/historial
+- **Navegación por flechas ↑↓ + Enter**, algo que el buscador original tampoco tenía — se corrige de paso
+- Los comandos se filtran por lo que escribís, igual que las páginas — buscar "zen" encuentra el comando, buscar el título de una nota encuentra la página, mezclados según relevancia
+- El texto de cada comando cambia según el estado actual (dice "Salir del Modo Zen" si ya está activo, no siempre "Activar")
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.58 — Backup completo del workspace
+
+De la lista de recomendaciones guardadas hace algunas tandas — con bases de datos y relaciones ya adentro, la confianza de que los datos no quedan atrapados pesa cada vez más.
+
+- **Un botón en Ajustes** ("⬇ Exportar todo mi workspace") arma un `.zip` con todas las páginas como Markdown, en carpetas que respetan la misma jerarquía del sidebar
+- **Las imágenes se bajan de verdad y se empaquetan adentro del zip** — no quedan como links a Supabase que podrían dejar de funcionar si el proyecto cambia o se borra algún día. Si una imagen puntual falla al bajarse (red, archivo borrado), esa página conserva el link original en vez de romper todo el export
+- **Duplicados manejados:** dos páginas hermanas con el mismo título no se pisan entre sí al exportar — se desambiguan con "(2)", "(3)", etc.
+- Barra de progreso simple mientras arma el backup, ya que bajar todas las imágenes puede tardar un poco en un workspace grande
+- Se agregó `jszip` como dependencia nueva — `npm audit` sigue en 0 vulnerabilidades después de agregarla
+- Probado con un caso simulado antes de entregar: jerarquía anidada, colisión de títulos, sanitización de caracteres inválidos para el sistema de archivos, y protección contra un ciclo corrupto de páginas — los 4 casos pasaron
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.59 — Página de validación de precios (Paso 3 de monetización, hecho herramienta)
+
+No construye Stripe ni cobra nada — es la herramienta para juntar señal real antes de decidir si la línea gratis/paga propuesta en `ESTRATEGIA_NEGOCIO.md` tiene sentido.
+
+- **`/planes`:** página pública, sin login, muestra el plan Free y Plus lado a lado, con un formulario que junta el email y si la persona pagaría por Plus o le alcanza con Free
+- **`009_waitlist.sql`:** tabla `waitlist_signups` con RLS que permite insertar a cualquiera (sin cuenta) pero **no permite leer a nadie desde el cliente, ni siquiera a quien se anotó** — la lista solo se ve desde el Table Editor de Supabase
+- Implementada como ruta pública dentro de la misma app (`window.location.pathname.startsWith('/planes')`, mismo patrón que `/share/`) en vez de una página estática aparte — así reutiliza la configuración de Supabase que ya existe, sin duplicar ninguna credencial a mano
+- `DISENO_MONETIZACION.md` actualizado con esto como "paso 0", antes de los 5 pasos de construir Stripe de verdad
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.60 — Landing page pública + comparación de planes
+
+- **`LandingPage.jsx`:** Header (wordmark + "Iniciar sesión"/"Crear cuenta" arriba a la derecha), Hero, 4 secciones de features (notas conectadas, bases de datos reales, foco real con Zen/Deep Work, herramientas de segundo cerebro), sección de precios, preguntas frecuentes, y footer con los links legales
+- **Insertada como el estado inicial de `AuthGate`**, no como una ruta aparte — aprovecha que `AuthGate` ya distingue "cargando sesión" / "autenticado" / "formulario de login": la landing solo se muestra en el tercer caso, así que nunca aparece para alguien con sesión activa y no hay parpadeo mientras se confirma
+- **`PlansComparison.jsx`:** la tabla Free/Plus como componente reutilizable — la misma vive en la landing pública y en el panel de Ajustes ("↓ Ver todos los planes", para quien ya tiene cuenta), una sola fuente de verdad
+- El plan Plus se muestra como "Próximamente" con un botón "Avisame cuando esté" que lleva a `/planes` — a propósito no dice ningún precio final todavía, ya que el Paso 3 de validación sigue en curso
+- El wordmark "Glenwyn" en el formulario de login ahora es clickeable y vuelve a la landing (excepto durante el flujo de restablecer contraseña, para no interrumpirlo por accidente)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.61 — Auditoría de promesas vs. realidad (primera vez que hacemos este tipo de revisión)
+
+Distinta a todas las auditorías anteriores: en vez de revisar el código en sí, se comparó cada afirmación de `privacidad.html`/`terminos.html` contra lo que el código realmente hacía.
+
+**El hallazgo principal:** la política de privacidad prometía "eliminar tu cuenta y todos tus datos" — pero no existía ningún botón ni función que lo hiciera de verdad en ningún lugar de la app.
+
+- **`supabase/functions/delete-account/index.ts`:** Edge Function nueva — necesaria porque borrar un usuario requiere la Service Role Key, que nunca puede vivir en el navegador. Borra las imágenes subidas del usuario en Storage (lo único que no se limpia solo, ya que `storage.objects` no tiene relación de llave foránea con `on delete cascade` hacia `auth.users`) y después borra el usuario — lo que sí dispara cascada automática sobre `pages`, `page_versions`, `databases`, `database_views`, y `profiles`, porque esas tablas ya tenían `on delete cascade` desde que se crearon
+- **"Zona de peligro" en Ajustes:** botón "Eliminar mi cuenta" con confirmación fuerte — hay que escribir "ELIMINAR" a mano antes de que el botón de borrado final se habilite. Se resetea solo si cerrás el panel sin confirmar
+- **Segundo hallazgo, mismo tipo de gap:** los Términos de servicio decían "los pagos se procesan a través de Stripe" como si ya estuviera activo — pero hoy no hay ningún plan pago disponible para comprar (Stripe es el Paso 4 de monetización, todavía no arrancado). Corregido para reflejar el estado real: plan gratis disponible hoy, planes pagos en desarrollo
+- README actualizado con el paso de deploy de la Edge Function (`supabase functions deploy delete-account`)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.62 — Reducción del bundle principal (665KB → 551KB)
+
+Vite viene avisando "chunks larger than 500 kB" en cada build desde hace muchísimas tandas, y nunca lo habíamos atendido.
+
+- **`jszip` con dynamic import:** solo se descarga cuando alguien realmente exporta el backup completo, en vez de venir empaquetado siempre — pasa de sumar al bundle principal a ser su propio archivo de 96KB, cargado bajo demanda
+- **`LandingPage`, `WaitlistPage`, y `SharedPageView` con `React.lazy()` + `Suspense`:** cada una es una pantalla que la mayoría de las sesiones nunca visita (alguien que ya tiene sesión iniciada nunca ve la landing; `/planes` y `/share/...` son rutas puntuales) — ahora cada una es su propio archivo chico (4-7KB), no peso muerto en la carga principal
+- **Resultado:** bundle principal de 665KB a 551KB — sigue arriba del umbral de 500KB de Vite, pero es una reducción real, sin haber tocado ninguna funcionalidad
+- Se podría seguir bajando dividiendo `Block.jsx` o `DatabaseViews.jsx` de forma similar, si hace falta más adelante
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.63 — Protección contra abuso en formularios públicos
+
+Investigado antes de construir: Supabase Auth sí tiene rate limiting incorporado para signup/login (token bucket, capacidad de 30 requests), pero eso **no cubre `waitlist_signups`** — esa tabla se inserta directo vía PostgREST con la anon key, sin pasar nunca por el limitador de Auth. Cero protección hasta ahora.
+
+- **`010_waitlist_hardening.sql`:** constraint de formato de email válido + índice único insensible a mayúsculas (mismo email no se puede anotar dos veces)
+- **Campo señuelo (honeypot)** en el formulario de `/planes` — invisible para una persona real, pero un bot que llena todos los campos que encuentra también llena este. Si viene lleno, se simula éxito sin tocar la base de datos, para no darle ninguna pista al bot
+- Mensaje amigable si alguien intenta anotarse dos veces con el mismo email, en vez de un error genérico
+
+**Hallazgo importante, no arreglable en código:** el SMTP por defecto de Supabase solo manda 2 emails de auth por hora (confirmación de cuenta, restablecer contraseña). Con una ola de interés real, la mayoría ni llegaría a confirmar su cuenta. Anotado en `CHECKLIST.md` como paso obligatorio antes de cualquier lanzamiento — hace falta conectar un SMTP propio (Resend, SendGrid, AWS SES).
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.64 — Foco automático en todos los modales (cierra el último hallazgo de la auditoría de accesibilidad)
+
+Quedaba pendiente desde la última re-auditoría: ningún modal de la app movía el foco al abrirse — alguien con teclado o lector de pantalla abría "Compartir" o "Ajustes" y el foco se quedaba en donde estaba antes, atrás del modal.
+
+- **`useAutoFocusOnOpen()`:** un hook chico y reutilizable, aplicado una sola vez en vez de parchear cada modal por separado — mueve el foco al contenedor del modal apenas se abre, suficiente para que un lector de pantalla anuncie el diálogo y su nombre, y para que `Tab` alcance el primer control real desde ahí
+- Aplicado a los 5 modales que les faltaba: Papelera, Historial de versiones, Compartir página, Ajustes, y Atajos de teclado — el buscador/paleta de comandos ya enfocaba su input directo, un patrón mejor todavía, sin cambios ahí
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.65 — Barra superior consolidada + primera auditoría de diseño visual
+
+Primera vez que se audita específicamente el diseño visual (íconos y paleta), a pedido — distinto de las auditorías de UX/accesibilidad/datos anteriores.
+
+- **Barra superior:** Compartir/Exportar/Historial ya no se muestran sueltos en pantallas anchas — ahora usan el mismo menú "⋯" que antes solo existía para pantallas angostas, sumando Ajustes y Atajos de teclado ahí también
+- **Hallazgo de iconografía:** ~48 emoji distintos usados como íconos en toda la app, mezclando estilos. El problema real no es solo estético — los emoji se renderizan distinto según el sistema operativo (Windows usa "Segoe UI Emoji", notablemente distinto de Apple), así que el mismo ícono se ve distinto para cada persona. Pendiente de decidir: reemplazar por un set de íconos vectoriales consistente (ej. `lucide-react`)
+- **Paleta de colores:** revisada, pendiente de dirección antes de tocarla — un rediseño de color a ciegas arriesgaría deshacer trabajo
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.66 — Rediseño de íconos con lucide-react (en curso)
+
+Instalado `lucide-react` (0 vulnerabilidades) para reemplazar los ~48 emoji usados como iconografía de la app — el problema real no era solo estético: los emoji se renderizan distinto según el sistema operativo (Windows usa un set notablemente distinto de Apple).
+
+**Reemplazado hasta ahora:**
+- Sidebar completo: Mis tareas, Bandeja de entrada, Notas huérfanas, modo claro/oscuro, Atajos de teclado, Guía de uso, Ajustes, Deep Work, Cerrar sesión
+- Barra superior: todo el menú "⋯" (Compartir, Exportar, Historial, Ajustes, Atajos)
+- Bases de datos: las 4 pestañas de vista (Tabla/Tablero/Calendario/Galería), ícono principal, quitar columna, abrir como página, eliminar fila, editar relaciones, badge de checkbox en galería
+- Bloques especializados: los 5 botones de cerrar/eliminar, ícono de imagen vacía, "Abrir enlace", los 3 íconos de página vinculada
+
+**Decisión de alcance, encontrada a mitad de camino:** los íconos de página (📄 por defecto, o el emoji que cada usuario elige desde la paleta de personalización) **quedan como emoji, a propósito** — son parte de una función de personalización de páginas, no iconografía de la app, y mezclar un ícono de línea con emoji elegidos por el usuario en la misma lista se vería inconsistente entre sí.
+
+**Pendiente para una próxima tanda:** `Block.jsx` (prioridad de tarea, recurrencia), `SecondBrainViews.jsx`, `SharedPageView.jsx`, `LandingPage.jsx`, `AuthGate.jsx` (mostrar/ocultar contraseña).
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.67 — Rediseño de íconos, tanda 3
+
+- **`Block.jsx`:** prioridad de tarea (bandera rellena con el color de prioridad), fecha vacía, ícono de callout (fijo, no personalizable por instancia — a diferencia de los íconos de página, así que sí cuenta como iconografía de la app)
+- **`SecondBrainViews.jsx`:** eliminar en notas huérfanas, prioridad y recurrencia en cada fila de tarea
+- **`AuthGate.jsx`:** mostrar/ocultar contraseña, continuar con teléfono
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.68 — Nueva paleta: "Miel dorada"
+
+Reemplaza el verde/tierra original por dorado como acento principal — elegida específicamente para diferenciar a Glenwyn de la competencia: Notion (gris), Obsidian (violeta), Todoist (rojo), Bear (rojo), Craft (azul), Reflect (oscuro) — ninguno usa dorado/miel.
+
+- **Verificación real de contraste antes de aplicar**, no a ojo: la primera versión de la propuesta fallaba WCAG AA en el texto secundario (`fern/canvas`, 2.87:1) y quedaba al límite en links/botones (`moss/canvas`, 3.16:1, solo válido para UI/texto grande, no para texto normal). Se oscurecieron esos dos tonos manteniendo el mismo matiz dorado — ambos ahora pasan 4.5:1 en modo claro y oscuro
+- Aplicada en todos lados: `theme.js`, la paleta hardcodeada de `AuthGate.jsx` (que vive aparte porque se renderiza antes de que exista el contexto de tema autenticado), y las 4 páginas estáticas (`guia.html`, `privacidad.html`, `terminos.html`, `cookies.html`)
+- Confirmado con una búsqueda final que no quedó ningún hex del paleta anterior en ningún archivo
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

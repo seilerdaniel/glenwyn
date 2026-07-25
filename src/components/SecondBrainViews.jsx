@@ -1,6 +1,7 @@
 import React from 'react';
 import { displayFont, monoFont } from '../theme';
 import { truncateLabel } from '../lib/pageUtils';
+import { Trash2, Flag, Repeat } from 'lucide-react';
 
 export function TasksView({ t, tasks, today, onToggle, onOpenPage }) {
   const overdue = tasks.filter((tsk) => !tsk.checked && tsk.dueDate < today);
@@ -128,9 +129,9 @@ export function OrphanPagesView({ t, pages, onOpenPage, onArchive }) {
               onClick={() => onArchive(p.id)}
               title="Mover a la papelera"
               className="glenwyn-focus"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 12.5, flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, flexShrink: 0, display: 'flex' }}
             >
-              🗑
+              <Trash2 size={13} strokeWidth={1.75} />
             </button>
           </div>
         ))
@@ -159,10 +160,10 @@ export function TaskRow({ t, task, onToggle, onOpenPage }) {
       />
       {task.priority && (
         <span
-          style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[task.priority], fontSize: 12, flexShrink: 0 }}
+          style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[task.priority], flexShrink: 0, display: 'flex' }}
           title={{ 1: 'Prioridad alta', 2: 'Prioridad media', 3: 'Prioridad baja' }[task.priority]}
         >
-          ⚑
+          <Flag size={12} strokeWidth={1.75} fill="currentColor" />
         </span>
       )}
       <span
@@ -177,7 +178,9 @@ export function TaskRow({ t, task, onToggle, onOpenPage }) {
         }}
       >
         {task.content || 'Tarea sin descripción'}
-        {task.recurrence && <span style={{ color: t.moss, marginLeft: 6 }}>↻</span>}
+        {task.recurrence && (
+          <Repeat size={11} strokeWidth={1.75} color={t.moss} style={{ marginLeft: 6, verticalAlign: 'middle' }} />
+        )}
       </span>
       <button
         onClick={() => onOpenPage(task.pageId)}

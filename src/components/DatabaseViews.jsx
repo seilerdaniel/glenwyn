@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { displayFont, monoFont } from '../theme';
+import { Table2, LayoutGrid, Calendar as CalendarIcon, GalleryHorizontal, Database, X, ExternalLink, Trash2, Pencil, Check } from 'lucide-react';
 import {
   PROPERTY_TYPES,
   ROLLUP_AGGREGATIONS,
@@ -11,16 +12,16 @@ import {
 
 export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, ...viewProps }) {
   const tabs = [
-    { id: 'table', label: 'Tabla', icon: '☰' },
-    { id: 'board', label: 'Tablero', icon: '▦' },
-    { id: 'calendar', label: 'Calendario', icon: '📅' },
-    { id: 'gallery', label: 'Galería', icon: '▤' },
+    { id: 'table', label: 'Tabla', Icon: Table2 },
+    { id: 'board', label: 'Tablero', Icon: LayoutGrid },
+    { id: 'calendar', label: 'Calendario', Icon: CalendarIcon },
+    { id: 'gallery', label: 'Galería', Icon: GalleryHorizontal },
   ];
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-        <span style={{ fontSize: 26 }}>🗄</span>
+        <Database size={26} strokeWidth={1.5} color={t.moss} />
         <span style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 30, color: t.bark }}>
           {page.title || 'Sin título'}
         </span>
@@ -46,7 +47,7 @@ export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, ..
               fontWeight: viewMode === tab.id ? 600 : 400,
             }}
           >
-            <span>{tab.icon}</span>
+            <tab.Icon size={14} strokeWidth={1.75} />
             <span>{tab.label}</span>
           </button>
         ))}
@@ -244,6 +245,13 @@ export function DatabaseCalendarView({ t, database, records, onAddRecord, onOpen
                   onClick={() => onOpenRecord(r.id)}
                   role="button"
                   tabIndex={0}
+                  className="glenwyn-focus"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenRecord(r.id);
+                    }
+                  }}
                   style={{
                     cursor: 'pointer',
                     color: t.bark,
@@ -317,9 +325,15 @@ export function DatabaseGalleryView({ t, database, records, onAddRecord, onOpenR
                 return (
                   <span
                     key={prop.id}
-                    style={{ fontSize: 10.5, color: t.fern, background: t.clay, borderRadius: 4, padding: '2px 6px' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, color: t.fern, background: t.clay, borderRadius: 4, padding: '2px 6px' }}
                   >
-                    {prop.type === 'checkbox' ? `✓ ${prop.name}` : String(value)}
+                    {prop.type === 'checkbox' ? (
+                      <>
+                        <Check size={11} strokeWidth={2} /> {prop.name}
+                      </>
+                    ) : (
+                      String(value)
+                    )}
                   </span>
                 );
               })}
@@ -411,9 +425,9 @@ export function DatabaseTableView({
                   <button
                     onClick={() => onRemoveProperty(prop.id)}
                     title="Quitar columna"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 11, flexShrink: 0, padding: 2 }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, flexShrink: 0, padding: 2, display: 'flex' }}
                   >
-                    ✕
+                    <X size={11} strokeWidth={2} />
                   </button>
                 </div>
                 {prop.type === 'relation' && (
@@ -496,9 +510,9 @@ export function DatabaseTableView({
                 <button
                   onClick={() => onOpenRecord(record.id)}
                   title="Abrir como página completa"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 12, flexShrink: 0 }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, flexShrink: 0, display: 'flex' }}
                 >
-                  ↗
+                  <ExternalLink size={13} strokeWidth={1.75} />
                 </button>
               </div>
               {properties.map((prop) => (
@@ -528,9 +542,9 @@ export function DatabaseTableView({
                 <button
                   onClick={() => onDeleteRecord(record.id)}
                   title="Eliminar fila (va a la papelera)"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 12 }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, display: 'flex' }}
                 >
-                  🗑
+                  <Trash2 size={13} strokeWidth={1.75} />
                 </button>
               </div>
             </React.Fragment>
@@ -565,6 +579,23 @@ export function RelationCell({ t, property, record, databases, allPages, onToggl
   const relatedDatabase = databases.find((d) => d.id === property.relatedDatabaseId);
   const relatedRecords = getRelatedRecords(allPages, record, property.id);
 
+  // A popover that can only be dismissed by clicking the exact button that opened
+  // it isn't really closable for a keyboard user — Escape and an outside click
+  // both need to work, same as every other popover in the app.
+  useEffect(() => {
+    if (!open) return;
+    const closeIt = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const closeOnOutsideClick = () => setOpen(false);
+    window.addEventListener('keydown', closeIt);
+    window.addEventListener('click', closeOnOutsideClick);
+    return () => {
+      window.removeEventListener('keydown', closeIt);
+      window.removeEventListener('click', closeOnOutsideClick);
+    };
+  }, [open]);
+
   if (!relatedDatabase) {
     return <span style={{ fontSize: 11.5, color: t.fern, fontStyle: 'italic' }}>sin configurar</span>;
   }
@@ -584,11 +615,16 @@ export function RelationCell({ t, property, record, databases, allPages, onToggl
           </span>
         ))}
         <button
-          onClick={() => setOpen((o) => !o)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
           className="glenwyn-focus"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 12 }}
+          aria-label={relatedRecords.length ? 'Editar relaciones' : 'Relacionar con un registro'}
+          title={relatedRecords.length ? 'Editar relaciones' : 'Relacionar con un registro'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 12, display: 'flex', alignItems: 'center' }}
         >
-          {relatedRecords.length ? '✎' : '+ relacionar'}
+          {relatedRecords.length ? <Pencil size={11} strokeWidth={1.75} /> : '+ relacionar'}
         </button>
       </div>
       {open && (

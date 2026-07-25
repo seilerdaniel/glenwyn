@@ -1,25 +1,31 @@
 // ---- Design tokens — shared across every component file ----
+// "Miel dorada" — dorado como acento principal en vez de verde, elegido para
+// diferenciarse de la competencia (Notion=gris, Obsidian=violeta, Todoist=rojo,
+// Bear=rojo, Craft=azul, Reflect=oscuro — ninguno usa dorado/miel). fern y moss
+// se oscurecieron respecto de la primera propuesta para pasar WCAG AA en texto
+// normal (4.5:1) — la propuesta inicial fallaba en fern/canvas (2.87:1) y
+// quedaba al límite en moss/canvas (3.16:1, solo válido para UI/texto grande).
 export const tokens = {
   light: {
-    canvas: '#F6F3EC',
-    canvasAlt: '#EFEAE0',
-    bark: '#2E2A24',
-    fern: '#7C8B6F',
-    moss: '#4A5D45',
-    clay: '#E8E2D3',
-    sun: '#C9A876',
-    sidebarBg: '#EFEAE0',
-    error: '#994530',
+    canvas: '#FCF6EA',
+    canvasAlt: '#F5EAD3',
+    bark: '#362916',
+    fern: '#7A6647',
+    moss: '#8C5F1E',
+    clay: '#EEDFBE',
+    sun: '#D9A542',
+    sidebarBg: '#F5EAD3',
+    error: '#A8432E',
   },
   dark: {
-    canvas: '#1C1F1A',
-    canvasAlt: '#20241D',
-    bark: '#E8E4D9',
-    fern: '#8FA085',
-    moss: '#6B8060',
-    clay: '#2E332A',
-    sun: '#D4B483',
-    sidebarBg: '#181B15',
+    canvas: '#211A0D',
+    canvasAlt: '#2A2110',
+    bark: '#F0E4CE',
+    fern: '#C2A97C',
+    moss: '#E0A83E',
+    clay: '#3A2E18',
+    sun: '#E8B563',
+    sidebarBg: '#1C160B',
     error: '#E08A65',
   },
 };

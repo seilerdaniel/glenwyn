@@ -63,7 +63,27 @@ Esto es lo que más importa definir bien antes de tocar código de "modo de pago
 
 ---
 
+## 3.5. Comparación con precios reales de la competencia
+
+Datos buscados y verificados en julio de 2026 — los precios cambian, conviene reconfirmar antes de fijar un número final.
+
+| App | Plan gratis | Plan pago individual | Qué desbloquea |
+|---|---|---|---|
+| **Notion** | Generoso — páginas ilimitadas para 1 persona | Plus **$10/mes** (anual) | Historial 30 días, uploads ilimitados, invitados ilimitados |
+| **Obsidian** | La app completa, sin límites, gratis para siempre | Sync **$4-5/mes**, Publish **$8-10/mes** (son add-ons, no un plan que desbloquea features del editor) | Sincronizar entre dispositivos / publicar como sitio |
+| **Todoist** | Limitado (5 proyectos activos, sin recordatorios) | Pro **$5/mes** (anual) | Recordatorios, 300 proyectos, filtros avanzados |
+| **Bear** | Funcional pero limitado | Pro **$2.99/mes** ($29.99/año) | Sync, temas, exportar |
+| **Craft** | Limitado | Plus **~$5/mes** | Funciones "core" ilimitadas |
+| **Reflect** | **No tiene** plan gratis | **$8-10/mes** | Todo — es 100% de pago desde el día uno |
+
+**Dónde encaja Glenwyn en esta comparación:** estructuralmente se parece más a Notion (bases de datos con relaciones y rollups — ninguno de los competidores nicho tiene esto; ni Bear ni Reflect, y Craft lo tiene pero reseñas lo describen como "más débil que Notion"), pero el público objetivo y la estética son más del grupo Bear/Craft/Reflect — gente que paga por algo bien hecho y con identidad, no por competir en escala con Notion.
+
+Esto da un argumento real para no anclar el precio al extremo barato (Bear a $3) — la feature que queda detrás del muro de pago (bases de datos con relaciones/rollups) es objetivamente más compleja que lo que ofrece cualquiera de los competidores nicho. Al mismo tiempo, cobrar lo mismo que Notion ($10) sería difícil de justificar todavía, siendo un producto de una sola persona sin colaboración en tiempo real ni el peso de marca de Notion.
+
+**Un rango para pensar, no una recomendación cerrada: $5-8/mes.** Por encima de Bear/Todoist Pro (que no tienen nada parecido a las bases de datos de Glenwyn), por debajo de Notion Plus (que tiene colaboración real y marca establecida). El número exacto debería confirmarse con las respuestas reales de `/planes`, no fijarse solo con esta comparación.
+
 ## 4. Lo que esto implica técnicamente (todavía no construido)
+
 
 Freemium real necesita infraestructura que hoy no existe:
 

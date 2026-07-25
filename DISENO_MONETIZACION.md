@@ -118,11 +118,13 @@ Cada límite del plan gratis necesita su propio trigger (o una función genéric
 
 ## Orden de construcción sugerido
 
+**0. ✅ Página de validación (`/planes`) — ya construida.** Antes de tocar cualquiera de los 5 pasos de abajo: una página pública, sin login, con la línea gratis/paga propuesta en `ESTRATEGIA_NEGOCIO.md` y un formulario que junta emails de interés en la tabla `waitlist_signups` (migración `009_waitlist.sql`). Sin RLS de lectura para nadie del lado del cliente — solo vos podés ver la lista, desde el Table Editor de Supabase. El objetivo es juntar señal real antes de construir Stripe, no vender nada todavía (no hay nada para cobrar en esta página).
+
 1. Tabla `profiles` + función que la cree automáticamente cuando alguien se registra (trigger en `auth.users`)
 2. Integración de Stripe: checkout + webhook + función serverless que actualiza `profiles`
 3. Los triggers de límite, uno por uno, empezando por el de bases de datos (es el ancla del plan pago)
 4. La interfaz de "esto es Plus" en cada punto donde aplica un límite
-5. Página de precios / pantalla de upgrade
+5. Página de precios / pantalla de upgrade (distinta de `/planes` — esa es de validación, esta ya cobraría de verdad)
 
 ## Riesgos y decisiones abiertas para cuando se arranque
 

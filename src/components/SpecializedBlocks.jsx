@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { bodyFont } from '../theme';
 import { isHttpUrl, parseEmbedUrl } from '../lib/pageUtils';
+import { X, Image as ImageIcon, ExternalLink, FileText } from 'lucide-react';
 
 export function ImageBlock({ block, t, onUrlChange, onCaptionChange, onDelete, onUploadFile }) {
   const [draft, setDraft] = useState(block.url || '');
@@ -37,7 +38,7 @@ export function ImageBlock({ block, t, onUrlChange, onCaptionChange, onDelete, o
             padding: '10px 12px',
           }}
         >
-          <span style={{ fontSize: 14 }}>🖼️</span>
+          <ImageIcon size={15} strokeWidth={1.75} color={t.fern} />
           <input
             className="glenwyn-focus"
             value={draft}
@@ -122,7 +123,7 @@ export function ImageBlock({ block, t, onUrlChange, onCaptionChange, onDelete, o
           zIndex: 1,
         }}
       >
-        ✕
+        <X size={13} strokeWidth={1.75} />
       </button>
       {broken ? (
         <div
@@ -238,7 +239,7 @@ export function TableBlock({ block, t, onCellChange, onAddRow, onAddColumn, onRe
                         cursor: 'pointer',
                       }}
                     >
-                      ✕
+                      <X size={13} strokeWidth={1.75} />
                     </button>
                   )}
                 </td>
@@ -250,7 +251,7 @@ export function TableBlock({ block, t, onCellChange, onAddRow, onAddColumn, onRe
                     title="Quitar fila"
                     style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 11 }}
                   >
-                    ✕
+                    <X size={13} strokeWidth={1.75} />
                   </button>
                 )}
               </td>
@@ -361,7 +362,7 @@ export function EmbedBlock({ block, t, onUrlChange, onDelete }) {
           zIndex: 1,
         }}
       >
-        ✕
+        <X size={13} strokeWidth={1.75} />
       </button>
 
       {kind === 'generic' ? (
@@ -378,7 +379,9 @@ export function EmbedBlock({ block, t, onUrlChange, onDelete }) {
           }}
         >
           <div style={{ fontSize: 13, color: t.bark, fontWeight: 500 }}>{block.url}</div>
-          <div style={{ fontSize: 11.5, color: t.fern, marginTop: 2 }}>Abrir enlace ↗</div>
+          <div style={{ fontSize: 11.5, color: t.fern, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+            Abrir enlace <ExternalLink size={11} strokeWidth={1.75} />
+          </div>
         </a>
       ) : kind === 'spotify' ? (
         <iframe
@@ -461,7 +464,7 @@ export function PageLinkBlock({ block, t, allPages, onNavigate, onSetPageLink, o
                 onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <span>📄</span>
+                <FileText size={14} strokeWidth={1.75} />
                 <span style={{ color: t.bark }}>{p.title || 'Sin título'}</span>
               </div>
             ))
@@ -487,7 +490,7 @@ export function PageLinkBlock({ block, t, allPages, onNavigate, onSetPageLink, o
           color: t.fern,
         }}
       >
-        <span>📄</span>
+        <FileText size={14} strokeWidth={1.75} />
         <span style={{ flex: 1 }}>Esta página ya no existe.</span>
         <button onClick={onDelete} style={{ border: 'none', background: 'none', color: t.fern, cursor: 'pointer', fontSize: 12 }}>
           quitar
@@ -516,7 +519,7 @@ export function PageLinkBlock({ block, t, allPages, onNavigate, onSetPageLink, o
       onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
     >
-      <span>📄</span>
+      <FileText size={14} strokeWidth={1.75} />
       <span style={{ flex: 1, textDecoration: 'underline', textDecorationColor: t.clay }}>
         {linkedPage.title || 'Sin título'}
       </span>
@@ -536,7 +539,7 @@ export function PageLinkBlock({ block, t, allPages, onNavigate, onSetPageLink, o
           opacity: 0,
         }}
       >
-        ✕
+        <X size={13} strokeWidth={1.75} />
       </button>
     </div>
   );
