@@ -1,25 +1,26 @@
 import React from 'react';
 import { tokens, displayFont, bodyFont, monoFont } from '../theme';
 import PlansComparison from './PlansComparison';
+import { Link2, Database, Focus, Inbox } from 'lucide-react';
 
 const FEATURES = [
   {
-    icon: '🔗',
+    Icon: Link2,
     title: 'Notas conectadas de verdad',
     body: 'Escribí [[así]] en medio de una oración y Glenwyn arma el link solo. Cada página lleva un panel de "quién te menciona" y un mini-mapa de vecinos — el diferencial de Obsidian, sin salir de tu flujo de escritura.',
   },
   {
-    icon: '🗄',
+    Icon: Database,
     title: 'Bases de datos reales',
     body: 'Tabla, tablero, calendario, galería — cuatro formas de ver los mismos registros. Relaciones entre bases de datos, y rollups que agregan (contar, sumar, promediar) sin que armes una fórmula.',
   },
   {
-    icon: '◐',
+    Icon: Focus,
     title: 'Foco real, no solo una promesa',
     body: 'Modo Zen oculta todo menos lo que estás escribiendo. Deep Work suma un temporizador de verdad, con cuenta regresiva, para sesiones que empiezan y terminan solas.',
   },
   {
-    icon: '📥',
+    Icon: Inbox,
     title: 'Un espacio que entiende cómo pensás',
     body: 'Bandeja de entrada para lo fugaz, notas huérfanas para lo que quedó sin conectar, un indicador de madurez que distingue un borrador de una idea asentada — herramientas de Zettelkasten real, no solo jerarquía con otro nombre.',
   },
@@ -140,7 +141,7 @@ export default function LandingPage({ onLogin, onSignup }) {
                 background: t.canvasAlt,
               }}
             >
-              <div style={{ fontSize: 26, marginBottom: 14 }}>{f.icon}</div>
+              <f.Icon size={26} strokeWidth={1.5} color={t.moss} style={{ marginBottom: 14 }} />
               <div style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 18, marginBottom: 8, color: t.bark }}>{f.title}</div>
               <div style={{ fontSize: 14, lineHeight: 1.7, color: t.fern }}>{f.body}</div>
             </div>

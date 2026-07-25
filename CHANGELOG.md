@@ -882,6 +882,25 @@ Reemplaza el verde/tierra original por dorado como acento principal — elegida 
 
 ---
 
+## v0.69 — Rediseño de íconos, tanda 4 (App.jsx casi completo)
+
+- **Paleta de comandos (⌘K):** el campo `icon` pasó de texto suelto a componentes reales de `lucide-react` — mismo cambio de fondo que ya se había hecho para las pestañas de bases de datos
+- Favorito, ordenar páginas, menú hamburguesa mobile, base de datos en el selector de plantillas, Papelera, toggle "Ver todos los planes", modo oscuro/claro del panel de Ajustes (uno distinto al del sidebar, se había pasado en la tanda anterior), botón flotante de Zen/Deep Work, y el título de la barra superior cuando "Mis tareas"/"Notas huérfanas" está abierto
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.70 — Rediseño de íconos completo
+
+Última tanda — `LandingPage.jsx` (las 4 tarjetas de features), `SharedPageView.jsx` (prioridad, callout, "ir a Glenwyn"), y dos que se habían pasado en `SidebarViews.jsx` (el pin de favorito ⭐/☆ y el botón de eliminar 🗑 de cada fila del árbol, distintos a los que ya se habían arreglado en la sección de Favoritos).
+
+**Verificación final:** búsqueda de emoji en todo `src/`, confirmando que lo único que queda son los casos intencionales: la paleta de emoji para personalizar páginas (`EMOJI_PALETTE`), los íconos de página por defecto/elegidos por el usuario (mismo sistema), las opciones de recurrencia dentro de un `<select>` nativo (no pueden contener componentes React), y un par de menciones descriptivas en texto plano (atajos de teclado, una frase explicando qué es el ícono de calendario).
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

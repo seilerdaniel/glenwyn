@@ -31,6 +31,16 @@ import {
   LogOut,
   Sun,
   Moon,
+  FilePlus,
+  Database,
+  Trash2,
+  Focus,
+  RotateCcw,
+  Star,
+  ArrowUpDown,
+  Menu,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 import {
@@ -1375,21 +1385,21 @@ function Glenwyn({ user }) {
   // as a plain array recreated each render since it's a dozen small objects,
   // not worth memoizing.
   const paletteCommands = [
-    { id: 'new-page', icon: '📄', label: 'Nueva página', keywords: 'crear pagina nota' },
-    { id: 'new-database', icon: '🗄', label: 'Nueva base de datos', keywords: 'crear tabla' },
-    { id: 'inbox', icon: '📥', label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox' },
-    { id: 'tasks', icon: '✓', label: 'Ver Mis tareas', keywords: 'pendientes vencidas' },
-    { id: 'orphans', icon: '🝓', label: 'Ver Notas huérfanas', keywords: 'sin conectar' },
-    { id: 'zen', icon: '◐', label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion' },
-    { id: 'deep-work', icon: '⏱', label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque' },
-    { id: 'dark-mode', icon: dark ? '☀' : '☾', label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia' },
-    { id: 'trash', icon: '🗑', label: 'Ver Papelera', keywords: 'eliminadas borradas' },
-    { id: 'settings', icon: '⚙', label: 'Abrir Ajustes', keywords: 'cuenta plan configuracion' },
-    { id: 'shortcuts', icon: '⌨', label: 'Ver atajos de teclado', keywords: 'ayuda teclas' },
+    { id: 'new-page', Icon: FilePlus, label: 'Nueva página', keywords: 'crear pagina nota' },
+    { id: 'new-database', Icon: Database, label: 'Nueva base de datos', keywords: 'crear tabla' },
+    { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox' },
+    { id: 'tasks', Icon: ListChecks, label: 'Ver Mis tareas', keywords: 'pendientes vencidas' },
+    { id: 'orphans', Icon: Unlink, label: 'Ver Notas huérfanas', keywords: 'sin conectar' },
+    { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion' },
+    { id: 'deep-work', Icon: Timer, label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque' },
+    { id: 'dark-mode', Icon: dark ? Sun : Moon, label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia' },
+    { id: 'trash', Icon: Trash2, label: 'Ver Papelera', keywords: 'eliminadas borradas' },
+    { id: 'settings', Icon: SettingsIcon, label: 'Abrir Ajustes', keywords: 'cuenta plan configuracion' },
+    { id: 'shortcuts', Icon: Keyboard, label: 'Ver atajos de teclado', keywords: 'ayuda teclas' },
     ...(activePage
       ? [
-          { id: 'share', icon: '🔗', label: 'Compartir esta página', keywords: 'link publico' },
-          { id: 'history', icon: '⟲', label: 'Ver historial de versiones', keywords: 'restaurar' },
+          { id: 'share', Icon: Link2, label: 'Compartir esta página', keywords: 'link publico' },
+          { id: 'history', Icon: History, label: 'Ver historial de versiones', keywords: 'restaurar' },
         ]
       : []),
   ];
@@ -1556,9 +1566,18 @@ function Glenwyn({ user }) {
           onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
           onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.55)}
         >
-          {deepWorkActive
-            ? `⏱ ${String(Math.floor(deepWorkSecondsLeft / 60)).padStart(2, '0')}:${String(deepWorkSecondsLeft % 60).padStart(2, '0')} · terminar`
-            : '↺ salir del Zen'}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {deepWorkActive ? (
+              <>
+                <Timer size={13} strokeWidth={1.75} />
+                {String(Math.floor(deepWorkSecondsLeft / 60)).padStart(2, '0')}:{String(deepWorkSecondsLeft % 60).padStart(2, '0')} · terminar
+              </>
+            ) : (
+              <>
+                <RotateCcw size={13} strokeWidth={1.75} /> salir del Zen
+              </>
+            )}
+          </span>
         </button>
       )}
 
@@ -1854,7 +1873,7 @@ function Glenwyn({ user }) {
                     color: p.id === activeId ? t.bark : t.fern,
                   }}
                 >
-                  <span style={{ fontSize: 12.5 }}>⭐</span>
+                  <Star size={12} strokeWidth={1.75} fill={t.sun} color={t.sun} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.title || 'Sin título'}
                   </span>
@@ -1883,7 +1902,7 @@ function Glenwyn({ user }) {
                 padding: '2px 8px 6px',
               }}
             >
-              <span>⇅</span>
+              <ArrowUpDown size={11} strokeWidth={1.75} />
               <span>
                 {sortMode === 'manual' ? 'orden manual' : sortMode === 'alphabetical' ? 'alfabético' : 'recientes primero'}
               </span>
@@ -2038,7 +2057,7 @@ function Glenwyn({ user }) {
                 onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ fontSize: 14 }}>🗄</span>
+                <Database size={15} strokeWidth={1.75} color={t.fern} />
                 <span>
                   <div style={{ fontSize: 12.5, color: t.bark }}>Base de datos</div>
                   <div style={{ fontSize: 10.5, color: t.fern }}>Tabla con propiedades — estado, fecha, y más</div>
@@ -2256,7 +2275,7 @@ function Glenwyn({ user }) {
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14 }}>🗑</span>
+              <Trash2 size={15} strokeWidth={1.75} />
               {sidebarOpen && <span>Papelera</span>}
             </span>
             {sidebarOpen && archivedPages.length > 0 && (
@@ -2366,12 +2385,12 @@ function Glenwyn({ user }) {
                   border: 'none',
                   cursor: 'pointer',
                   color: t.fern,
-                  fontSize: 15,
                   padding: 2,
                   flexShrink: 0,
+                  display: 'flex',
                 }}
               >
-                ☰
+                <Menu size={17} strokeWidth={1.75} />
               </button>
             )}
             {breadcrumbChain.map((ancestor) => (
@@ -2387,8 +2406,18 @@ function Glenwyn({ user }) {
                 <span style={{ opacity: 0.4 }}>/</span>
               </span>
             ))}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-              {tasksViewOpen ? '✓ Mis tareas' : orphansViewOpen ? '🝓 Notas huérfanas' : activePage ? activePage.title || 'Sin título' : ''}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {tasksViewOpen ? (
+                <>
+                  <ListChecks size={13} strokeWidth={1.75} /> Mis tareas
+                </>
+              ) : orphansViewOpen ? (
+                <>
+                  <Unlink size={13} strokeWidth={1.75} /> Notas huérfanas
+                </>
+              ) : (
+                activePage ? activePage.title || 'Sin título' : ''
+              )}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'relative' }}>
@@ -2824,7 +2853,9 @@ function Glenwyn({ user }) {
                   }}
                   onMouseEnter={() => setPaletteIndex(i)}
                 >
-                  <span style={{ width: 16, textAlign: 'center' }}>{cmd.icon}</span>
+                  <span style={{ width: 16, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                    <cmd.Icon size={14} strokeWidth={1.75} />
+                  </span>
                   <span>{cmd.label}</span>
                 </div>
               ))}
@@ -3358,9 +3389,10 @@ function Glenwyn({ user }) {
               <button
                 onClick={() => setPlansExpanded((p) => !p)}
                 className="glenwyn-focus"
-                style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: t.moss, cursor: 'pointer', marginBottom: 10, display: 'block' }}
+                style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: t.moss, cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 4 }}
               >
-                {plansExpanded ? '↑ Ocultar planes' : '↓ Ver todos los planes'}
+                {plansExpanded ? <ChevronUp size={13} strokeWidth={1.75} /> : <ChevronDown size={13} strokeWidth={1.75} />}
+                {plansExpanded ? 'Ocultar planes' : 'Ver todos los planes'}
               </button>
             )}
             {plansExpanded && !profile?.isAdmin && (
@@ -3385,9 +3417,10 @@ function Glenwyn({ user }) {
               <button
                 onClick={() => setDark((d) => !d)}
                 className="glenwyn-focus"
-                style={{ background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '5px 12px', fontSize: 12.5, color: t.fern, cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '5px 12px', fontSize: 12.5, color: t.fern, cursor: 'pointer' }}
               >
-                {dark ? '☀ Cambiar a claro' : '☾ Cambiar a oscuro'}
+                {dark ? <Sun size={13} strokeWidth={1.75} /> : <Moon size={13} strokeWidth={1.75} />}
+                {dark ? 'Cambiar a claro' : 'Cambiar a oscuro'}
               </button>
             </div>
 

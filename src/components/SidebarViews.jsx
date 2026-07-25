@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { displayFont } from '../theme';
+import { Star, Trash2 } from 'lucide-react';
 
 export function PageRow({
   page: p,
@@ -194,12 +195,12 @@ export function PageRow({
                 border: 'none',
                 cursor: 'pointer',
                 color: p.pinned ? t.sun : t.fern,
-                fontSize: 12,
                 padding: '2px 4px',
                 borderRadius: 4,
+                display: 'flex',
               }}
             >
-              {p.pinned ? '⭐' : '☆'}
+              <Star size={13} strokeWidth={1.75} fill={p.pinned ? t.sun : 'none'} />
             </button>
             <button
               onClick={onAddSubpage}
@@ -242,12 +243,12 @@ export function PageRow({
                 border: 'none',
                 cursor: 'pointer',
                 color: t.fern,
-                fontSize: 13,
                 padding: '2px 4px',
                 borderRadius: 4,
+                display: 'flex',
               }}
             >
-              🗑
+              <Trash2 size={13} strokeWidth={1.75} />
             </button>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tokens, displayFont, bodyFont, monoFont } from '../theme';
 import { fetchSharedPage } from '../lib/sharedPageRepo';
+import { ArrowRight, Flag, Lightbulb } from 'lucide-react';
 import { parseEmbedUrl } from '../lib/pageUtils';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -120,8 +121,8 @@ function SharedPageView({ token }) {
         }}
       >
         <span>vista de solo lectura · Glenwyn</span>
-        <a href="/" style={{ color: t.moss, textDecoration: 'none' }}>
-          ir a Glenwyn →
+        <a href="/" style={{ color: t.moss, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+          ir a Glenwyn <ArrowRight size={12} strokeWidth={1.75} />
         </a>
       </div>
       <div className="glenwyn-canvas-content" style={{ maxWidth: 720, margin: '0 auto', padding: '48px 32px 120px' }}>
@@ -146,7 +147,9 @@ function ReadOnlyBlock({ block: b, t }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 6, alignItems: 'flex-start' }}>
           <input type="checkbox" checked={!!b.checked} readOnly style={{ marginTop: 5, accentColor: t.moss }} />
           {b.priority && (
-            <span style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[b.priority], fontSize: 12, marginTop: 3 }}>⚑</span>
+            <span style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[b.priority], marginTop: 3, display: 'flex' }}>
+              <Flag size={12} strokeWidth={1.75} fill="currentColor" />
+            </span>
           )}
           <span style={{ flex: 1, color: b.checked ? t.fern : t.bark, textDecoration: b.checked ? 'line-through' : 'none' }}>{b.content}</span>
           {b.dueDate && (
@@ -174,7 +177,7 @@ function ReadOnlyBlock({ block: b, t }) {
     case 'callout':
       return (
         <div style={{ display: 'flex', gap: 10, background: t.clay, borderRadius: 8, padding: '10px 14px', margin: '10px 0' }}>
-          <span>💡</span>
+          <Lightbulb size={16} strokeWidth={1.75} color={t.fern} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>{b.content}</span>
         </div>
       );
