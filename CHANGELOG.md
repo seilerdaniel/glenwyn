@@ -951,6 +951,32 @@ También se guardaron en `BANCO_DE_IDEAS.md` (sección L) varias ideas y tareas 
 
 ---
 
+## v0.76 — Bases de datos: nombre e ícono editables
+
+Primer paso de la idea #55 del banco — inspirado en una revisión detallada de cómo Notion permite configurar una base de datos (capturas de julio 2026), guardada como referencia completa para las fases siguientes.
+
+- **El título de la base de datos ahora es un input editable**, no texto fijo — mismo estilo que el título de cualquier página normal
+- **El ícono es clickeable** y abre el mismo selector de emoji que ya existía para páginas — sin ícono elegido, muestra el ícono de base de datos por defecto (`Database` de lucide); con uno elegido, muestra el emoji
+- Reutiliza `IconPicker` de `SidebarViews.jsx` en vez de duplicar el selector — una base de datos es, por dentro, la misma página normal de siempre, así que la función de personalización ya existía, solo faltaba conectarla en esta vista
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.77 — Bases de datos: elegir la vista de entrada al crear
+
+Segundo paso de la idea #55 — en vez de arrancar siempre en modo tabla, el selector de plantillas ahora ofrece las 4 vistas como puntos de partida directos: Tabla, Tablero, Calendario, Galería.
+
+- El esquema de propiedades por defecto ya incluye "Estado" (selección) y "Fecha" — exactamente lo que necesitan Tablero (agrupa por selección) y Calendario (ubica por fecha) para funcionar de entrada, sin pedir ninguna configuración extra
+- `createDatabasePage()` ahora acepta el modo de vista inicial, aplicado apenas se crea la base de datos
+- El comando "Nueva base de datos" de la paleta (⌘K) sigue creando en modo tabla por defecto, para mantener esa acción como un atajo rápido de un solo paso
+
+**Sigue pendiente de la idea #55:** soporte para insertar una base de datos inline (como bloque dentro de otra página, no solo como página completa) — el cambio más grande de los tres, para una tanda aparte.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

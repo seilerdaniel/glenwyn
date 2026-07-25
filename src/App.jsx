@@ -41,6 +41,10 @@ import {
   Menu,
   ChevronUp,
   ChevronDown,
+  Table2,
+  LayoutGrid,
+  Calendar as CalendarIcon,
+  GalleryHorizontal,
 } from 'lucide-react';
 
 import {
@@ -572,7 +576,7 @@ function Glenwyn({ user }) {
   // Postgres before `databases.page_id` can reference it as a foreign key, so
   // this saves it directly and awaits that — going through the normal debounced
   // autosave here would very likely race and fail with a foreign-key violation.
-  const createDatabasePage = async (parentId = null) => {
+  const createDatabasePage = async (parentId = null, initialViewMode = 'table') => {
     const siblings = pages.filter((p) => p.parentId === parentId);
     const newPage = emptyPage('Base de datos sin título', parentId, siblings.length);
 
@@ -597,6 +601,12 @@ function Glenwyn({ user }) {
       setDatabases((prev) => [...prev, db]);
       setPages((prev) => [...prev, newPage]);
       setActiveId(newPage.id);
+      // El tablero agrupa por selección y el calendario ubica por fecha — como
+      // el esquema por defecto ya trae "Estado" (select) y "Fecha" (date), elegir
+      // cualquiera de esas dos vistas de entrada ya funciona sin configurar nada más.
+      if (initialViewMode !== 'table') {
+        setDatabaseViewModes((prev) => ({ ...prev, [db.id]: initialViewMode }));
+      }
       if (parentId) setExpandedIds((e) => ({ ...e, [parentId]: true }));
     } catch (e) {
       console.error('Glenwyn: failed to create database', e);
@@ -2042,27 +2052,41 @@ function Glenwyn({ user }) {
                 </div>
               ))}
               <div
-                onClick={() => {
-                  createDatabasePage(null);
-                  setTemplateMenuOpen(false);
-                }}
                 style={{
-                  display: 'flex',
-                  gap: 9,
-                  alignItems: 'center',
-                  padding: '8px 10px',
-                  cursor: 'pointer',
+                  padding: '8px 10px 4px',
+                  fontSize: 10,
+                  fontFamily: monoFont,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.03em',
+                  color: t.fern,
                   borderTop: `1px solid ${t.clay}`,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <Database size={15} strokeWidth={1.75} color={t.fern} />
-                <span>
-                  <div style={{ fontSize: 12.5, color: t.bark }}>Base de datos</div>
-                  <div style={{ fontSize: 10.5, color: t.fern }}>Tabla con propiedades — estado, fecha, y más</div>
-                </span>
+                Base de datos
               </div>
+              {[
+                { mode: 'table', label: 'Tabla', Icon: Table2, desc: 'Filas y columnas con propiedades' },
+                { mode: 'board', label: 'Tablero', Icon: LayoutGrid, desc: 'Agrupada por estado, estilo kanban' },
+                { mode: 'calendar', label: 'Calendario', Icon: CalendarIcon, desc: 'Ubicada por fecha' },
+                { mode: 'gallery', label: 'Galería', Icon: GalleryHorizontal, desc: 'Tarjetas visuales' },
+              ].map((opt) => (
+                <div
+                  key={opt.mode}
+                  onClick={() => {
+                    createDatabasePage(null, opt.mode);
+                    setTemplateMenuOpen(false);
+                  }}
+                  style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '8px 10px', cursor: 'pointer' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <opt.Icon size={15} strokeWidth={1.75} color={t.fern} />
+                  <span>
+                    <div style={{ fontSize: 12.5, color: t.bark }}>{opt.label}</div>
+                    <div style={{ fontSize: 10.5, color: t.fern }}>{opt.desc}</div>
+                  </span>
+                </div>
+              ))}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: sidebarOpen ? 2 : 0 }}>
@@ -2596,6 +2620,8 @@ function Glenwyn({ user }) {
                 databases={databases}
                 allPages={pages}
                 records={databaseRecords}
+                onRenameDatabase={(title) => renamePage(activePage.id, title)}
+                onSetDatabaseIcon={(icon) => setPageIcon(activePage.id, icon)}
                 viewMode={databaseViewModes[activeDatabase.id] || 'table'}
                 onChangeViewMode={(mode) =>
                   setDatabaseViewModes((prev) => ({ ...prev, [activeDatabase.id]: mode }))

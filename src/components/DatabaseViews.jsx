@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { displayFont, monoFont } from '../theme';
 import { Table2, LayoutGrid, Calendar as CalendarIcon, GalleryHorizontal, Database, X, ExternalLink, Trash2, Pencil, Check } from 'lucide-react';
+import { IconPicker } from './SidebarViews';
 import {
   PROPERTY_TYPES,
   ROLLUP_AGGREGATIONS,
@@ -10,7 +11,8 @@ import {
   resolvePropertyValue,
 } from '../lib/pageUtils';
 
-export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, ...viewProps }) {
+export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, onRenameDatabase, onSetDatabaseIcon, ...viewProps }) {
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const tabs = [
     { id: 'table', label: 'Tabla', Icon: Table2 },
     { id: 'board', label: 'Tablero', Icon: LayoutGrid },
@@ -21,10 +23,49 @@ export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, ..
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-        <Database size={26} strokeWidth={1.5} color={t.moss} />
-        <span style={{ fontFamily: displayFont, fontWeight: 600, fontSize: 30, color: t.bark }}>
-          {page.title || 'Sin título'}
-        </span>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIconPickerOpen((o) => !o);
+            }}
+            title="Cambiar el ícono de la base de datos"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'flex' }}
+          >
+            {page.icon ? (
+              <span style={{ fontSize: 26 }}>{page.icon}</span>
+            ) : (
+              <Database size={26} strokeWidth={1.5} color={t.moss} />
+            )}
+          </button>
+          {iconPickerOpen && (
+            <IconPicker
+              t={t}
+              current={page.icon}
+              onPick={(icon) => {
+                onSetDatabaseIcon(icon);
+                setIconPickerOpen(false);
+              }}
+            />
+          )}
+        </div>
+        <input
+          className="glenwyn-focus"
+          value={page.title}
+          onChange={(e) => onRenameDatabase(e.target.value)}
+          placeholder="Sin título"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            border: 'none',
+            background: 'transparent',
+            fontFamily: displayFont,
+            fontWeight: 600,
+            fontSize: 30,
+            color: t.bark,
+            outline: 'none',
+          }}
+        />
       </div>
       <div style={{ display: 'flex', gap: 4, marginBottom: 22, borderBottom: `1px solid ${t.clay}` }}>
         {tabs.map((tab) => (

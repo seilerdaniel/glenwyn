@@ -261,10 +261,19 @@ Hoy una base de datos siempre es una página completa aparte. Notion permite dos
 - **Integrada (inline):** vive dentro de otra página, como un bloque más, sin ocupar toda la pantalla
 - **Página completa:** lo que Glenwyn ya tiene hoy
 
-Además, al crear una base de datos nueva, Notion deja elegir entre varios puntos de partida (tabla en blanco, tablero, galería, calendario, formulario, gráficos, etc. — ver capturas). Cosas concretas a construir:
-- Cambiar el nombre y el ícono de una base de datos después de creada (hoy no se puede — nace con el nombre/ícono por defecto y ahí queda)
-- Soporte para insertar una base de datos como bloque dentro de una página existente (inline), no solo como página completa
-- Un selector al crear, mostrando los tipos de vista disponibles de entrada, en vez de arrancar siempre en modo tabla
+Al crear, Notion muestra un modal con sugerencias (Seguimiento de tareas, Proyectos, Centro de documentos, Sesión de lluvia de ideas, Notas de reunión, Seguimiento de objetivos) o la opción de empezar vacía.
+
+**Referencia detallada de la configuración de una base de datos en Notion** (capturas de julio 2026), para cuando se retome esto en profundidad:
+- **Menú "Ir a la configuración" de una vista:** nombre de la vista, Diseño (el tipo de vista — ver abajo), Visibilidad de la propiedad, Filtrar, Ordenar, Agrupar, Color condicional, Copiar enlace a la vista
+- **Diseño (tipos de vista) — 9 en total:** Tabla, Tablero, Cronograma, Calendario, Lista, Galería, Gráfico, Feed, Mapa, Panel de control. Glenwyn hoy tiene 4 (Tabla/Tablero/Calendario/Galería) — Cronograma, Lista, Gráfico, Feed, Mapa, y Panel de control quedan como candidatos futuros, sin orden de prioridad todavía
+- **Configuración de fuente de datos:** Origen, Editar propiedades, Automatizaciones, Autocompletado con IA, Ver páginas archivadas, Más configuraciones (Subítems, Dependencias, Conexiones, Personalizar diseño de página, Convertir en Tareas)
+- **Visibilidad de propiedad:** buscador + lista con toggle de mostrar/ocultar por columna, más un botón "Ocultar todo"
+- **Plantillas de registro:** botón "Nuevo ▾" permite crear una plantilla de página reutilizable para los registros nuevos (más rico que los "valores por defecto por propiedad" que ya tiene Glenwyn — esto también pre-llena contenido de bloques, no solo propiedades)
+- **Bloquear base de datos** para que no se pueda editar por accidente — mencionado, sin capturas detalladas
+
+**En progreso ahora:** nombre e ícono editables después de creada (es el punto de partida elegido — ver commits siguientes)
+
+Pendiente, sin arrancar: soporte inline (insertar como bloque dentro de una página existente, no solo como página completa), selector de tipo de vista al crear (en vez de arrancar siempre en modo tabla), y todo lo demás de la referencia de arriba.
 
 ### 56. Auditoría de arquitectura de información del sidebar 🟡 — **pendiente, sin hacer todavía**
 Señalado directamente: las opciones del sidebar (Ajustes, Atajos, Guía de uso, Deep Work, Modo oscuro, Papelera, Cerrar sesión, plan actual) están todas sueltas, una debajo de la otra, sin ningún agrupamiento — a diferencia de Notion, que las organiza en menús (Cuenta, Espacio de trabajo, Funciones, Admin, Acceso y facturación — ver capturas). Vale una revisión completa de qué va en el sidebar directo, qué va agrupado dentro de Ajustes, y qué merecería su propio menú aparte — no es un ajuste chico, es repensar la organización completa.
