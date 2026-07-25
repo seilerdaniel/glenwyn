@@ -913,6 +913,14 @@ Encontrado en producción: después de iniciar sesión con Google, el `access_to
 
 ---
 
+## v0.72 — Fix de seguimiento: quedaba un `#` vacío después de limpiar la URL
+
+Confirmado en producción por el usuario: el fix anterior sacaba los tokens, pero dejaba un `#` solo en la URL. Causa: la condición original solo limpiaba si el hash todavía contenía `access_token` — pero `supabase-js` a veces alcanza a borrar el contenido del hash (dejando el símbolo `#` solo) antes de que el chequeo llegara a correr, así que nunca se activaba. Ampliado para limpiar cualquier resto de hash, sin importar el contenido.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

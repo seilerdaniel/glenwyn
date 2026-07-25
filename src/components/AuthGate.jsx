@@ -169,7 +169,10 @@ export default function AuthGate({ children }) {
   // de forma explícita, apenas se confirma la sesión, sin depender de que la
   // librería lo haga por su cuenta.
   const stripAuthTokensFromUrl = () => {
-    if (window.location.hash && window.location.hash.includes('access_token')) {
+    // Cualquier resto de hash, no solo cuando todavía contiene el token —
+    // supabase-js a veces alcanza a borrar el contenido del hash pero deja el
+    // símbolo "#" solo, antes de que este chequeo llegue a correr.
+    if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   };
