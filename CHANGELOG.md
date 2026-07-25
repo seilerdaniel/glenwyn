@@ -941,6 +941,16 @@ Los dos fixes anteriores (v0.72, v0.73) apuntaban a la causa equivocada. Confirm
 
 ---
 
+## v0.75 — Fix: el triángulo sin contexto junto a "Nueva página"
+
+Reportado como si no tuviera función — en realidad sí abre el menú de plantillas (incluida la opción de crear base de datos), pero un carácter suelto "▾" sin texto ni ícono reconocible es indistinguible de un adorno roto. Reemplazado por `ChevronDown` de `lucide-react`, con `aria-label` explícito.
+
+También se guardaron en `BANCO_DE_IDEAS.md` (sección L) varias ideas y tareas nuevas surgidas de comparar capturas de Notion: personalización de bases de datos (nombre/ícono editable, soporte para insertarlas inline en vez de solo como página completa, selector de tipo al crear), una auditoría pendiente de la arquitectura de información del sidebar (reorganizar en menús, como hace Notion), y un catálogo de features de la Configuración de Notion para evaluar cuáles construir en Glenwyn (2FA, passkeys, gestión de dispositivos, preferencias de idioma/fecha/zona horaria, panel de cookies personalizable, etc.)
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

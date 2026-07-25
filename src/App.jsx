@@ -2092,17 +2092,18 @@ function Glenwyn({ user }) {
                 className="glenwyn-focus"
                 onClick={() => setTemplateMenuOpen((o) => !o)}
                 title="Nueva página desde una plantilla"
+                aria-label="Nueva página desde una plantilla"
                 style={{
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   color: t.fern,
-                  fontSize: 11,
                   padding: '7px 8px',
                   borderRadius: 7,
+                  display: 'flex',
                 }}
               >
-                ▾
+                <ChevronDown size={14} strokeWidth={1.75} />
               </button>
             )}
           </div>

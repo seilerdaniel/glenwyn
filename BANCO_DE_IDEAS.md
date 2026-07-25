@@ -254,6 +254,56 @@ Si la pestaña está abierta y una tarea vence hoy, una notificación nativa (We
 ### 54. Una vista de inicio real 🟡
 Hoy la app abre en la última página activa. Una pantalla de bienvenida chica (páginas editadas esta semana, tareas de hoy, alguna estadística simple) le daría a "abrir Glenwyn" una sensación de punto de partida, no de "seguir donde quedé".
 
+## L. Ideas y auditorías nuevas, comparando con Notion (capturas de julio 2026)
+
+### 55. Bases de datos: personalización + inline vs. página completa 🟠
+Hoy una base de datos siempre es una página completa aparte. Notion permite dos formas de insertar una:
+- **Integrada (inline):** vive dentro de otra página, como un bloque más, sin ocupar toda la pantalla
+- **Página completa:** lo que Glenwyn ya tiene hoy
+
+Además, al crear una base de datos nueva, Notion deja elegir entre varios puntos de partida (tabla en blanco, tablero, galería, calendario, formulario, gráficos, etc. — ver capturas). Cosas concretas a construir:
+- Cambiar el nombre y el ícono de una base de datos después de creada (hoy no se puede — nace con el nombre/ícono por defecto y ahí queda)
+- Soporte para insertar una base de datos como bloque dentro de una página existente (inline), no solo como página completa
+- Un selector al crear, mostrando los tipos de vista disponibles de entrada, en vez de arrancar siempre en modo tabla
+
+### 56. Auditoría de arquitectura de información del sidebar 🟡 — **pendiente, sin hacer todavía**
+Señalado directamente: las opciones del sidebar (Ajustes, Atajos, Guía de uso, Deep Work, Modo oscuro, Papelera, Cerrar sesión, plan actual) están todas sueltas, una debajo de la otra, sin ningún agrupamiento — a diferencia de Notion, que las organiza en menús (Cuenta, Espacio de trabajo, Funciones, Admin, Acceso y facturación — ver capturas). Vale una revisión completa de qué va en el sidebar directo, qué va agrupado dentro de Ajustes, y qué merecería su propio menú aparte — no es un ajuste chico, es repensar la organización completa.
+
+### 57. Fix ya hecho: el triángulo sin contexto junto a "+ Nueva página" ✅
+Reportado como si no tuviera función — en realidad sí abre el menú de plantillas, pero un carácter suelto "▾" sin ningún otro indicio visual es indistinguible de un adorno roto. Reemplazado por un ícono de línea (`ChevronDown` de lucide) con `aria-label` explícito, como parte de esta misma tanda.
+
+### 58. Catálogo de features de Configuración de Notion, para evaluar cuáles construir 🟡
+De las capturas de las preferencias/configuración de Notion — lista de qué existe ahí, para decidir cuáles tienen sentido en Glenwyn (no es una lista de "hay que construir todo esto", es un menú para elegir):
+
+**Perfil y cuenta:**
+- Foto de perfil / avatar personalizado
+- Cambiar contraseña desde Ajustes (hoy solo existe "olvidé mi contraseña" en el login)
+- Verificación en dos pasos (2FA)
+- Passkeys (login biométrico)
+- ID de usuario visible (para soporte/debugging)
+
+**Sesión y dispositivos:**
+- Lista de dispositivos con sesión activa (nombre, última actividad, ubicación aproximada)
+- "Cerrar sesión en todos los dispositivos" (distinto de cerrar solo la sesión actual)
+
+**Preferencias de la app:**
+- Modo (sistema/claro/oscuro) — Glenwyn ya tiene claro/oscuro, falta la opción "seguir configuración del sistema"
+- Idioma del corrector ortográfico
+- Empezar la semana en lunes (afecta cómo se ven las fechas en el calendario de bases de datos)
+- Formato de fecha (relativo vs. absoluto)
+- Zona horaria (automática por ubicación, o manual)
+- Formato de números/moneda
+
+**Privacidad:**
+- Configuración de cookies personalizable (hoy Glenwyn solo tiene la política informativa, sin un panel de preferencias real)
+- Visibilidad del perfil (si otros usuarios ven tu nombre/foto al compartir espacio)
+
+**Soporte:**
+- Toggle de "permiso de acceso temporal para soporte técnico" (para cuando alguien necesite ayuda a resolver un problema)
+
+**Facturación (cuando exista Stripe):**
+- Página de "explorar los planes" separada de Ajustes, con la tabla comparativa completa (ya existe `PlansComparison.jsx`, pero podría ampliarse a esta vista dedicada)
+
 ## K. Tipos de auditoría todavía no hechos
 
 Ya cubiertas: datos/lógica (5 veces), diseño/UX, seguridad, performance, accesibilidad, SEO. Pendientes, de otra naturaleza:
