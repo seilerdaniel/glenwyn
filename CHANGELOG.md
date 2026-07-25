@@ -701,6 +701,14 @@ Ver `DISENO_MONETIZACION.md` para el diseño completo.
 
 ---
 
+## v0.55 — Fix: la migración de admin comparaba el email en modo sensible a mayúsculas
+
+Bug real encontrado probando en vivo: la primera versión de `008_admin.sql` comparaba el email con `=` exacto — si el email quedó guardado con alguna variación de mayúsculas/minúsculas (posible según el proveedor de login), el `update` no encontraba ninguna fila y no aplicaba el flag, **sin tirar ningún error**. Corregido a `lower(email) = lower(...)`, insensible a mayúsculas. El archivo en el repo ya quedó con el fix — si alguna vez se recrea el proyecto de Supabase desde cero, esta vez funciona a la primera.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

@@ -11,6 +11,10 @@ comment on column public.profiles.is_admin is
 
 -- Otorga admin (y el plan más alto, para que cualquier feature "solo Business"
 -- también se vea habilitada) a la cuenta de Daniel específicamente.
+-- Comparación insensible a mayúsculas/minúsculas a propósito: un email guardado
+-- con distinta capitalización (algo que puede pasar según el proveedor de login)
+-- hacía que la comparación exacta no encontrara ninguna fila, sin tirar ningún
+-- error — el update simplemente no afectaba ninguna fila, en silencio.
 update public.profiles
 set is_admin = true, plan = 'business'
-where user_id = (select id from auth.users where email = 'dseiler.dev@gmail.com');
+where user_id = (select id from auth.users where lower(email) = lower('dseiler.dev@gmail.com'));
