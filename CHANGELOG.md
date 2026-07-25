@@ -931,6 +931,16 @@ Confirmado por el usuario que el `#` seguía apareciendo después del fix anteri
 
 ---
 
+## v0.74 — La causa real, confirmada con datos: `location.hash` miente sobre un `#` colgado
+
+Los dos fixes anteriores (v0.72, v0.73) apuntaban a la causa equivocada. Confirmado con una prueba directa (`new URL('https://glenwyn.vercel.app/#').hash` devuelve `""`, string vacío) que `window.location.hash` **reporta vacío cuando la URL termina en un `#` solo**, sin nada después — aunque la barra de direcciones lo siga mostrando. El chequeo `if (window.location.hash)` de los fixes anteriores nunca se disparaba en este caso específico, porque estaba revisando la propiedad equivocada.
+
+**Fix real:** ahora se revisa `window.location.href` completo (buscando el carácter `#` en cualquier parte de la URL), en vez de confiar en `.hash` — es la única forma confiable de detectar un `#` colgado sin contenido.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 
