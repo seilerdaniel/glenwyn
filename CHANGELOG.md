@@ -921,6 +921,16 @@ Confirmado en producción por el usuario: el fix anterior sacaba los tokens, per
 
 ---
 
+## v0.73 — Fix de seguimiento #2: el `#` seguía volviendo — era un problema de orden, no de condición
+
+Confirmado por el usuario que el `#` seguía apareciendo después del fix anterior. Nueva hipótesis, más probable: `supabase-js` intenta su propia limpieza del hash *después* de que corre nuestro código, probablemente con algo como `location.hash = ''` — que en JavaScript dice "vacío" pero técnicamente deja el símbolo `#` colgando, no lo saca del todo. Si esa limpieza tardía de la librería corre después de la nuestra, pisa el resultado.
+
+**Fix:** la limpieza ahora corre con un pequeño retraso (100ms) a propósito, para asegurarse de ser la última palabra sobre el estado de la URL, después de cualquier intento de la librería.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

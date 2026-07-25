@@ -169,12 +169,17 @@ export default function AuthGate({ children }) {
   // de forma explícita, apenas se confirma la sesión, sin depender de que la
   // librería lo haga por su cuenta.
   const stripAuthTokensFromUrl = () => {
-    // Cualquier resto de hash, no solo cuando todavía contiene el token —
-    // supabase-js a veces alcanza a borrar el contenido del hash pero deja el
-    // símbolo "#" solo, antes de que este chequeo llegue a correr.
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
-    }
+    // Corre con un pequeño retraso a propósito: si supabase-js todavía intenta
+    // su propia limpieza del hash después de esto (por ejemplo, haciendo algo
+    // como `location.hash = ''` — que en JS deja el símbolo "#" solo, no lo
+    // saca del todo), esa limpieza tardía pisaría la nuestra. Dejando que esto
+    // corra último, después de cualquier intento de la librería, se asegura
+    // que la URL quede realmente limpia, sin el "#" colgando.
+    setTimeout(() => {
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }, 100);
   };
 
   useEffect(() => {
