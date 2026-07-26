@@ -977,6 +977,25 @@ Segundo paso de la idea #55 — en vez de arrancar siempre en modo tabla, el sel
 
 ---
 
+## v0.78 — Fix: el borde dorado al escribir en un bloque
+
+El indicador que marca en qué bloque estás escribiendo (un borde fino a la izquierda) usaba `moss` — el acento principal de la paleta, que con "Miel dorada" es un tono dorado/miel bien visible. Cambiado a `fern`, el gris-marrón apagado que ya se usa para texto secundario en toda la app — sigue marcando dónde estás escribiendo, sin ser un dorado protagonista.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.79 — Idea #59 construida: acciones de página consolidadas en el árbol
+
+Los 4 íconos sueltos que aparecían al pasar el mouse sobre una página (favorito, agregar subpágina, duplicar, eliminar) ahora viven en un solo menú "⋯" — mismo patrón que ya se aplicó a la barra superior (v0.65). Se sumaron 3 acciones más, ya que existían en otro lado de la app pero no acá: **Compartir**, **Exportar a Markdown**, **Historial de versiones**.
+
+- **Bug real encontrado y arreglado al conectar "Historial" desde el árbol:** el botón "Restaurar" del modal de historial usaba `activePage.id` en vez de la página cuyo historial se estaba mirando — invisible mientras el historial solo se podía abrir para la página activa (topbar, paleta de comandos), pero real y peligroso apenas se agregó una forma de abrir el historial de OTRA página sin navegar primero. Se arregló haciendo que "Historial" (y "Compartir", que tenía el mismo riesgo) naveguen a esa página antes de abrir el modal correspondiente
+- El menú se mantiene visible mientras está abierto, sin importar si el mouse se aleja de la fila — si no, moverse hacia una opción del menú podría hacerlo desaparecer antes de poder tocarla
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

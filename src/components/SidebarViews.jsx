@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { displayFont } from '../theme';
-import { Star, Trash2 } from 'lucide-react';
+import { Star, Trash2, MoreHorizontal, Copy, Link2, Download, History } from 'lucide-react';
 
 export function PageRow({
   page: p,
@@ -23,6 +23,9 @@ export function PageRow({
   onAddSubpage,
   onTogglePin,
   onDuplicate,
+  onShare,
+  onExport,
+  onViewHistory,
   onSetIcon,
   onDragStart,
   onDragEnd,
@@ -30,6 +33,7 @@ export function PageRow({
   onDropRow,
 }) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!iconPickerOpen) return;
@@ -37,6 +41,13 @@ export function PageRow({
     window.addEventListener('click', closeIt);
     return () => window.removeEventListener('click', closeIt);
   }, [iconPickerOpen]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const closeIt = () => setActionsMenuOpen(false);
+    window.addEventListener('click', closeIt);
+    return () => window.removeEventListener('click', closeIt);
+  }, [actionsMenuOpen]);
   const isDropBefore = dropTarget && dropTarget.id === p.id && dropTarget.position === 'before';
   const isDropAfter = dropTarget && dropTarget.id === p.id && dropTarget.position === 'after';
   const isDropInside = dropTarget && dropTarget.id === p.id && dropTarget.position === 'inside';
@@ -184,60 +195,15 @@ export function PageRow({
         {sidebarOpen && (
           <div
             className="glenwyn-page-actions"
-            style={{ display: 'flex', gap: 2 }}
+            style={{ position: 'relative', opacity: actionsMenuOpen ? 1 : undefined }}
           >
             <button
-              onClick={onTogglePin}
-              title={p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-              aria-label={p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: p.pinned ? t.sun : t.fern,
-                padding: '2px 4px',
-                borderRadius: 4,
-                display: 'flex',
+              onClick={(e) => {
+                e.stopPropagation();
+                setActionsMenuOpen((o) => !o);
               }}
-            >
-              <Star size={13} strokeWidth={1.75} fill={p.pinned ? t.sun : 'none'} />
-            </button>
-            <button
-              onClick={onAddSubpage}
-              title="Agregar subpágina"
-              aria-label="Agregar subpágina"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: t.fern,
-                fontSize: 13,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              +
-            </button>
-            <button
-              onClick={onDuplicate}
-              title="Duplicar página"
-              aria-label="Duplicar página"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: t.fern,
-                fontSize: 12,
-                padding: '2px 4px',
-                borderRadius: 4,
-              }}
-            >
-              ⎘
-            </button>
-            <button
-              onClick={onDelete}
-              title="Mover a la papelera"
-              aria-label="Mover a la papelera"
+              title="Más acciones"
+              aria-label="Más acciones"
               style={{
                 background: 'none',
                 border: 'none',
@@ -248,8 +214,72 @@ export function PageRow({
                 display: 'flex',
               }}
             >
-              <Trash2 size={13} strokeWidth={1.75} />
+              <MoreHorizontal size={14} strokeWidth={1.75} />
             </button>
+            {actionsMenuOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 4,
+                  width: 190,
+                  background: t.canvas,
+                  border: `1px solid ${t.clay}`,
+                  borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  zIndex: 8,
+                  overflow: 'hidden',
+                }}
+              >
+                {[
+                  {
+                    key: 'pin',
+                    Icon: Star,
+                    label: p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos',
+                    onClick: onTogglePin,
+                    iconProps: { fill: p.pinned ? t.sun : 'none', color: p.pinned ? t.sun : t.fern },
+                  },
+                  { key: 'subpage', Icon: undefined, label: 'Agregar subpágina', onClick: onAddSubpage, glyph: '+' },
+                  { key: 'duplicate', Icon: Copy, label: 'Duplicar página', onClick: onDuplicate },
+                  { key: 'share', Icon: Link2, label: 'Compartir', onClick: onShare },
+                  { key: 'export', Icon: Download, label: 'Exportar a Markdown', onClick: onExport },
+                  { key: 'history', Icon: History, label: 'Historial de versiones', onClick: onViewHistory },
+                  { key: 'delete', Icon: Trash2, label: 'Mover a la Papelera', onClick: onDelete },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={(e) => {
+                      item.onClick(e);
+                      setActionsMenuOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 9,
+                      padding: '8px 12px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: t.bark,
+                      fontSize: 13,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {item.Icon ? (
+                      <item.Icon size={14} strokeWidth={1.75} {...(item.iconProps || {})} />
+                    ) : (
+                      <span style={{ width: 14, textAlign: 'center', color: t.fern }}>{item.glyph}</span>
+                    )}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

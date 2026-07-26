@@ -313,6 +313,33 @@ De las capturas de las preferencias/configuración de Notion — lista de qué e
 **Facturación (cuando exista Stripe):**
 - Página de "explorar los planes" separada de Ajustes, con la tabla comparativa completa (ya existe `PlansComparison.jsx`, pero podría ampliarse a esta vista dedicada)
 
+### 59. Consolidar las acciones de cada fila del árbol en un menú "⋯" 🟢 — ✅ construido
+Señalado directamente: hoy, al pasar el mouse sobre una página en el árbol del sidebar, aparecen 4 íconos sueltos uno al lado del otro — favorito (⭐), agregar subpágina (+), duplicar, eliminar. Mismo patrón que ya se resolvió para la barra superior (ver v0.65, "Barra superior consolidada") — la solución sería igual: un solo botón "⋯" que abra un menú desplegable con esas 4 acciones, dejando lugar para sumar más sin que la fila se vea recargada.
+
+**Candidatas a sumar en ese mismo menú**, ya que existen en otros lugares de la app pero no acá: Compartir (ya tiene link por página), Exportar a Markdown, Ver historial de versiones — todas ya son acciones por página que hoy solo se acceden abriendo la página y usando el menú "⋯" de la barra superior; tenerlas también disponibles desde el árbol (sin necesidad de abrir la página primero) ahorraría un paso.
+
+### 60. Menú de acciones de página, estilo Notion 🟠
+De las capturas del menú "⋯" de una página en Notion: Copiar enlace, Copiar el contenido de la página, Duplicar, Mover a, Archivar, Mover a la Papelera, Presentar (modo pantalla completa tipo diapositivas), Disponible sin conexión, Texto pequeño, Ancho completo, Personalizar página, Bloquear página (evitar ediciones por accidente), Usar con la IA, Sugerir ediciones, Traducir, Importar, Exportar, Convertir en wiki, Notificaciones y estadísticas, Historial de versiones, Comentarios/Conexiones. Glenwyn ya tiene varias de estas sueltas (exportar, historial, duplicar) — vale evaluar cuáles del resto suman de verdad (Bloquear página y Ancho completo parecen las más simples y útiles de entrada) sin copiar todo por copiar.
+
+### 61. Paletas de color seleccionables por el usuario 🟠
+Hoy existe una sola paleta fija (Miel dorada). La idea es dejar elegir entre varias — las 4 alternativas cozy que ya se diseñaron y descartaron (Terracota, Lavanda, Miel oscura/musgo, Cacao) más la actual, como puntos de partida ya listos. Requeriría guardar la preferencia por usuario (similar a cómo ya se guarda claro/oscuro) y una sección nueva en Ajustes.
+
+### 62. Marketplace interno — plugins, temas, y plantillas de otros usuarios 🔴
+Proyecto grande, con varias piezas: un sistema de temas de verdad (más allá de elegir entre paletas predefinidas — permitir crear/compartir las propias), plantillas de página compartidas entre usuarios, y algún tipo de sistema de plugins/extensiones. Necesitaría su propia infraestructura (galería, revisión de contenido, permisos) — no es una feature chica, es una categoría de producto aparte.
+
+### 63. Integraciones con otras apps 🟠
+Sin especificar cuáles todavía — candidatas obvias dado lo que ya existe en el mercado: Google Calendar (sincronizar tareas con fecha), Slack/Discord (notificaciones), Zapier/Make (automatizar sin código). Cada una es su propio proyecto de integración (OAuth, permisos, sincronización bidireccional o no).
+
+### 64. Plantillas de metodología completas — journaling, GTD, Zettelkasten, PARA 🟡
+Más ambicioso que las plantillas actuales (Diario, Notas de reunión, Brainstorm): plantillas completas y editables para métodos de productividad reconocidos —
+- **Journaling / Agenda completa**: una plantilla anual editable, con estructura por día/semana/mes
+- **GTD (Getting Things Done)**: bandejas de entrada, próximas acciones, proyectos, algún día/tal vez, contextos
+- **Zettelkasten**: ya parcialmente cubierto por las funciones de segundo cerebro existentes (backlinks, notas huérfanas, indicador de madurez) — esto sería una plantilla guía explícita sobre esas funciones, no una feature nueva
+- **PARA (Proyectos/Áreas/Recursos/Archivo)**: ya existía como idea de diseño (#19 de una sección anterior) — esto la retoma como plantilla concreta, no solo estructura de carpetas
+
+### 65. Soporte offline con sincronización automática 🔴
+Que la app funcione sin conexión (guardando cambios localmente) y sincronice solo apenas vuelva la conexión a internet. Es un cambio de arquitectura grande — hoy todo el guardado depende de Supabase en línea; esto requeriría una capa de almacenamiento local (IndexedDB) y lógica de resolución de conflictos si se editó lo mismo desde dos lugares sin conexión. Ya estaba mencionado indirectamente en el banco (PWA instalable, idea de la lista de 20) pero nunca con el detalle de sincronización que se pide acá.
+
 ## K. Tipos de auditoría todavía no hechos
 
 Ya cubiertas: datos/lógica (5 veces), diseño/UX, seguridad, performance, accesibilidad, SEO. Pendientes, de otra naturaleza:

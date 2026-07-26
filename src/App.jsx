@@ -1496,7 +1496,7 @@ function Glenwyn({ user }) {
            draws entirely inside the existing box, so it never shifts the text. */
         textarea.glenwyn-block:focus {
           outline: none;
-          box-shadow: inset 3px 0 0 0 ${t.moss};
+          box-shadow: inset 3px 0 0 0 ${t.fern};
           border-radius: 3px;
         }
         .glenwyn-focus:focus-visible { outline: 2px solid ${t.moss} !important; outline-offset: 2px; }
@@ -1991,6 +1991,17 @@ function Glenwyn({ user }) {
                   onDuplicate={(e) => {
                     e.stopPropagation();
                     duplicatePage(p.id);
+                  }}
+                  onShare={() => {
+                    selectPage(p.id);
+                    setShareError('');
+                    setShareCopied(false);
+                    setShareOpen(true);
+                  }}
+                  onExport={() => exportPageAsMarkdown(p)}
+                  onViewHistory={() => {
+                    selectPage(p.id);
+                    openHistory(p.id);
                   }}
                   onSetIcon={(icon) => setPageIcon(p.id, icon)}
                   onDragStart={() => setDragId(p.id)}
