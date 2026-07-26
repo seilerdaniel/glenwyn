@@ -44,6 +44,10 @@ import {
   LayoutGrid,
   Calendar as CalendarIcon,
   GalleryHorizontal,
+  StretchHorizontal,
+  Lock,
+  Unlock,
+  Check,
 } from 'lucide-react';
 
 import {
@@ -740,6 +744,18 @@ function Glenwyn({ user }) {
 
   const togglePin = (id) => {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, pinned: !p.pinned } : p)));
+  };
+
+  // Idea #60 — dos opciones del menú de página de Notion evaluadas como más
+  // simples y útiles de entrar primero: ancho completo (más espacio horizontal
+  // para el contenido) y bloquear página (protección simple contra ediciones
+  // por accidente, no un permiso real entre usuarios distintos).
+  const toggleFullWidth = (id) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, fullWidth: !p.fullWidth } : p)));
+  };
+
+  const toggleLocked = (id) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, locked: !p.locked } : p)));
   };
 
   // Duplicates a single page (not its subpages) as a sibling right after the original.
@@ -2300,35 +2316,6 @@ function Glenwyn({ user }) {
               {profile.isAdmin ? 'Administrador' : `Plan ${profile.plan}`}
             </div>
           )}
-          <button
-            className="glenwyn-focus"
-            onClick={() => supabase.auth.signOut()}
-            title={user.email || user.phone || 'Tu cuenta'}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center',
-              gap: 8,
-              padding: '7px 8px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: t.fern,
-              fontSize: 12.5,
-              borderRadius: 7,
-              marginTop: 2,
-              borderTop: sidebarOpen ? `1px solid ${t.clay}` : 'none',
-              paddingTop: 10,
-            }}
-          >
-            <LogOut size={14} strokeWidth={1.75} />
-            {sidebarOpen && (
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Cerrar sesión · {user.email || user.phone || 'tu cuenta'}
-              </span>
-            )}
-          </button>
         </div>
       </div>
       <div
@@ -2404,7 +2391,10 @@ function Glenwyn({ user }) {
                   <Unlink size={13} strokeWidth={1.75} /> Notas huérfanas
                 </>
               ) : (
-                activePage ? activePage.title || 'Sin título' : ''
+                <>
+                  {activePage?.locked && <Lock size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} />}
+                  {activePage ? activePage.title || 'Sin título' : ''}
+                </>
               )}
             </span>
           </div>
@@ -2495,6 +2485,35 @@ function Glenwyn({ user }) {
                 </button>
                 <button
                   onClick={() => {
+                    toggleFullWidth(activePage.id);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', width: '100%' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <StretchHorizontal size={14} strokeWidth={1.75} />
+                      Ancho completo
+                    </span>
+                    {activePage.fullWidth && <Check size={13} strokeWidth={2} color={t.moss} />}
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    toggleLocked(activePage.id);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', width: '100%' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {activePage.locked ? <Lock size={14} strokeWidth={1.75} /> : <Unlock size={14} strokeWidth={1.75} />}
+                      {activePage.locked ? 'Desbloquear página' : 'Bloquear página'}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
                     setSettingsOpen(true);
                     setTopbarMenuOpen(false);
                   }}
@@ -2562,7 +2581,7 @@ function Glenwyn({ user }) {
             padding: '64px 32px 120px',
           }}
         >
-          <div style={{ width: '100%', maxWidth: activeDatabase ? 920 : 720 }}>
+          <div style={{ width: '100%', maxWidth: activeDatabase ? 920 : activePage?.fullWidth ? '100%' : 720 }}>
             {tasksViewOpen ? (
               <TasksView
                 t={t}
@@ -2658,6 +2677,7 @@ function Glenwyn({ user }) {
                     key={b.id}
                     block={b}
                     t={t}
+                    locked={!!activePage.locked}
                     listNumber={b.type === 'numbered' ? numberedListPosition(activePage.blocks, i) : null}
                     onChange={(content) => updateBlock(activePage.id, b.id, content)}
                     onEnter={(nextType) => addBlock(activePage.id, b.id, nextType)}
@@ -3393,8 +3413,9 @@ function Glenwyn({ user }) {
             <button
               onClick={() => supabase.auth.signOut()}
               className="glenwyn-focus"
-              style={{ background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '6px 12px', fontSize: 12.5, color: t.error, cursor: 'pointer', marginBottom: 22 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '6px 12px', fontSize: 12.5, color: t.error, cursor: 'pointer', marginBottom: 22 }}
             >
+              <LogOut size={13} strokeWidth={1.75} />
               Cerrar sesión
             </button>
 

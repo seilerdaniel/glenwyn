@@ -77,6 +77,8 @@ function rowToPage(row) {
     shareToken: row.share_token ?? null,
     databaseId: row.database_id ?? null,
     properties: row.properties ?? null,
+    fullWidth: !!row.full_width,
+    locked: !!row.locked,
   };
 }
 
@@ -94,5 +96,7 @@ function pageToRow(page, userId) {
     pinned: !!page.pinned,
     database_id: page.databaseId ?? null,
     properties: page.properties ?? null,
+    full_width: !!page.fullWidth,
+    locked: !!page.locked,
   };
 }

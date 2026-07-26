@@ -13,6 +13,7 @@ import { ImageBlock, TableBlock, EmbedBlock, PageLinkBlock, SlashMenu } from './
 function Block({
   block,
   t,
+  locked,
   onChange,
   onEnter,
   onExtractSelection,
@@ -39,6 +40,34 @@ function Block({
   onNavigate,
   onSetPageLink,
 }) {
+  // Idea #60 — "Bloquear página" neutralizes every content-mutating handler
+  // right here, once, instead of touching each block type's JSX individually.
+  // onToggleOpen (expand/collapse a toggle block) and onNavigate (follow a link)
+  // stay active on purpose — those are navigation, not edits.
+  const noop = () => {};
+  if (locked) {
+    onChange = noop;
+    onEnter = noop;
+    onExtractSelection = noop;
+    onToggle = noop;
+    onDueDateChange = noop;
+    onCyclePriority = noop;
+    onRecurrenceChange = noop;
+    onConvert = noop;
+    onDuplicate = noop;
+    onToggleBodyChange = noop;
+    onImageUrlChange = noop;
+    onUploadFile = noop;
+    onEmbedUrlChange = noop;
+    onTableCellChange = noop;
+    onTableAddRow = noop;
+    onTableAddColumn = noop;
+    onTableRemoveRow = noop;
+    onTableRemoveColumn = noop;
+    onDelete = noop;
+    onSetPageLink = noop;
+  }
+
   const ref = useRef(null);
   const bodyRef = useRef(null);
   const [slashOpen, setSlashOpen] = useState(false);
@@ -300,6 +329,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value)}
@@ -404,6 +434,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value)}
@@ -447,6 +478,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value)}
@@ -475,6 +507,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value)}
@@ -510,6 +543,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value)}
@@ -548,6 +582,7 @@ function Block({
           <textarea
             ref={setMainRef}
             className="glenwyn-block glenwyn-focus"
+            readOnly={locked}
             rows={1}
             value={block.content}
             onChange={(e) => handleChange(e.target.value)}
@@ -664,6 +699,7 @@ function Block({
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
+          readOnly={locked}
           rows={1}
           value={block.content}
           onChange={(e) => handleChange(e.target.value, e.target.selectionStart)}
