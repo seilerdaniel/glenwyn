@@ -392,6 +392,50 @@ function Glenwyn({ user }) {
           setShortcutsOpen((s) => !s);
         }
       }
+      // Atajos nuevos — todos ⌘/Ctrl+Shift+[letra], salvo Ajustes que usa la
+      // convención estándar de macOS (⌘,) para preferencias. Cada uno llama al
+      // mismo dispatcher que ya usa la paleta de comandos, vía la ref para no
+      // quedar pegado a datos viejos (ver comentario junto a runPaletteCommandRef).
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        runPaletteCommandRef.current('new-page');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        runPaletteCommandRef.current('new-database');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        runPaletteCommandRef.current('tasks');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        runPaletteCommandRef.current('orphans');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        runPaletteCommandRef.current('deep-work');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        runPaletteCommandRef.current('dark-mode');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        runPaletteCommandRef.current('trash');
+      }
+      if (mod && !e.shiftKey && e.key === ',') {
+        e.preventDefault();
+        runPaletteCommandRef.current('settings');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (activeIdRef.current) runPaletteCommandRef.current('share');
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        if (activeIdRef.current) runPaletteCommandRef.current('history');
+      }
       if (e.key === 'Escape') {
         setSearchOpen(false);
         setTrashOpen(false);
@@ -410,7 +454,7 @@ function Glenwyn({ user }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- quickCaptureToInbox only touches stable setters and refs, safe to close over once
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- quickCaptureToInbox only touches stable setters and refs; every other action goes through runPaletteCommandRef, always safe to close over once
   }, []);
 
   useEffect(() => {
@@ -1410,21 +1454,21 @@ function Glenwyn({ user }) {
   // as a plain array recreated each render since it's a dozen small objects,
   // not worth memoizing.
   const paletteCommands = [
-    { id: 'new-page', Icon: FilePlus, label: 'Nueva página', keywords: 'crear pagina nota' },
-    { id: 'new-database', Icon: Database, label: 'Nueva base de datos', keywords: 'crear tabla' },
+    { id: 'new-page', Icon: FilePlus, label: 'Nueva página', keywords: 'crear pagina nota', shortcut: '⌘⇧N' },
+    { id: 'new-database', Icon: Database, label: 'Nueva base de datos', keywords: 'crear tabla', shortcut: '⌘⇧B' },
     { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox', shortcut: '⌘⇧I' },
-    { id: 'tasks', Icon: ListChecks, label: 'Ver Mis tareas', keywords: 'pendientes vencidas' },
-    { id: 'orphans', Icon: Unlink, label: 'Ver Notas huérfanas', keywords: 'sin conectar' },
+    { id: 'tasks', Icon: ListChecks, label: 'Ver Mis tareas', keywords: 'pendientes vencidas', shortcut: '⌘⇧T' },
+    { id: 'orphans', Icon: Unlink, label: 'Ver Notas huérfanas', keywords: 'sin conectar', shortcut: '⌘⇧H' },
     { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion', shortcut: '⌘.' },
-    { id: 'deep-work', Icon: Timer, label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque' },
-    { id: 'dark-mode', Icon: dark ? Sun : Moon, label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia' },
-    { id: 'trash', Icon: Trash2, label: 'Ver Papelera', keywords: 'eliminadas borradas' },
-    { id: 'settings', Icon: SettingsIcon, label: 'Abrir Ajustes', keywords: 'cuenta plan configuracion' },
+    { id: 'deep-work', Icon: Timer, label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque', shortcut: '⌘⇧D' },
+    { id: 'dark-mode', Icon: dark ? Sun : Moon, label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia', shortcut: '⌘⇧L' },
+    { id: 'trash', Icon: Trash2, label: 'Ver Papelera', keywords: 'eliminadas borradas', shortcut: '⌘⇧P' },
+    { id: 'settings', Icon: SettingsIcon, label: 'Abrir Ajustes', keywords: 'cuenta plan configuracion', shortcut: '⌘,' },
     { id: 'shortcuts', Icon: Keyboard, label: 'Ver atajos de teclado', keywords: 'ayuda teclas', shortcut: '?' },
     ...(activePage
       ? [
-          { id: 'share', Icon: Link2, label: 'Compartir esta página', keywords: 'link publico' },
-          { id: 'history', Icon: History, label: 'Ver historial de versiones', keywords: 'restaurar' },
+          { id: 'share', Icon: Link2, label: 'Compartir esta página', keywords: 'link publico', shortcut: '⌘⇧S' },
+          { id: 'history', Icon: History, label: 'Ver historial de versiones', keywords: 'restaurar', shortcut: '⌘⇧V' },
         ]
       : []),
   ];
@@ -1454,6 +1498,18 @@ function Glenwyn({ user }) {
     else if (id === 'share') setShareOpen(true);
     else if (id === 'history') setHistoryOpen(true);
   };
+
+  // Los atajos de teclado nuevos (ver más abajo, sección "Keyboard shortcuts")
+  // llaman a esto a través de una ref, no directo — el manejador de teclado se
+  // crea una sola vez al montar (deps []), así que si llamara a
+  // runPaletteCommand directo, quedaría pegado a la versión de ese primer
+  // render, con `pages`/`activePage` como estaban entonces (casi siempre
+  // vacíos, antes de cargar). La ref siempre apunta a la versión más nueva.
+  const runPaletteCommandRef = useRef(runPaletteCommand);
+  useEffect(() => {
+    runPaletteCommandRef.current = runPaletteCommand;
+  });
+
 
   const filteredPaletteCommands = useMemo(() => {
     if (!searchQuery) return paletteCommands;
@@ -2336,6 +2392,7 @@ function Glenwyn({ user }) {
             top: 0,
             left: 0,
             right: 0,
+            height: 45,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -2347,9 +2404,10 @@ function Glenwyn({ user }) {
             opacity: hideChrome ? 0.12 : 1,
             pointerEvents: hideChrome ? 'none' : 'auto',
             transition: 'opacity 200ms ease',
+            boxSizing: 'border-box',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0, whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
             {isNarrow && !sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -2399,7 +2457,7 @@ function Glenwyn({ user }) {
               )}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'nowrap', position: 'relative' }}>
             {/* Compartir/exportar/historial/palabras viven en un solo menú "⋯", en
                 cualquier tamaño de pantalla — mostrarlos todos sueltos en desktop era
                 justo lo que hacía sentir la barra superior recargada. */}
@@ -3620,8 +3678,18 @@ function Glenwyn({ user }) {
                 { group: 'General', items: [
                   ['⌘ / Ctrl + \\', 'Colapsar / expandir el sidebar'],
                   ['⌘ / Ctrl + K', 'Buscar páginas o ejecutar un comando (↑↓ para navegar)'],
+                  ['⌘ / Ctrl + Shift + N', 'Nueva página'],
+                  ['⌘ / Ctrl + Shift + B', 'Nueva base de datos'],
                   ['⌘ / Ctrl + Shift + I', 'Captura rápida — ir a la Bandeja de entrada y empezar a escribir'],
+                  ['⌘ / Ctrl + Shift + T', 'Ver Mis tareas'],
+                  ['⌘ / Ctrl + Shift + H', 'Ver Notas huérfanas'],
                   ['⌘ / Ctrl + .', 'Modo Zen — oculta todo menos lo que estás escribiendo'],
+                  ['⌘ / Ctrl + Shift + D', 'Iniciar / terminar Deep Work'],
+                  ['⌘ / Ctrl + Shift + L', 'Cambiar modo claro / oscuro'],
+                  ['⌘ / Ctrl + Shift + P', 'Ver Papelera'],
+                  ['⌘ / Ctrl + ,', 'Abrir Ajustes'],
+                  ['⌘ / Ctrl + Shift + S', 'Compartir la página activa'],
+                  ['⌘ / Ctrl + Shift + V', 'Ver historial de versiones de la página activa'],
                   ['?', 'Mostrar esta ayuda'],
                   ['Esc', 'Cerrar el panel abierto'],
                 ]},
