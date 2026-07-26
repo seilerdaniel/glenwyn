@@ -1412,15 +1412,15 @@ function Glenwyn({ user }) {
   const paletteCommands = [
     { id: 'new-page', Icon: FilePlus, label: 'Nueva página', keywords: 'crear pagina nota' },
     { id: 'new-database', Icon: Database, label: 'Nueva base de datos', keywords: 'crear tabla' },
-    { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox' },
+    { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox', shortcut: '⌘⇧I' },
     { id: 'tasks', Icon: ListChecks, label: 'Ver Mis tareas', keywords: 'pendientes vencidas' },
     { id: 'orphans', Icon: Unlink, label: 'Ver Notas huérfanas', keywords: 'sin conectar' },
-    { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion' },
+    { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion', shortcut: '⌘.' },
     { id: 'deep-work', Icon: Timer, label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque' },
     { id: 'dark-mode', Icon: dark ? Sun : Moon, label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia' },
     { id: 'trash', Icon: Trash2, label: 'Ver Papelera', keywords: 'eliminadas borradas' },
     { id: 'settings', Icon: SettingsIcon, label: 'Abrir Ajustes', keywords: 'cuenta plan configuracion' },
-    { id: 'shortcuts', Icon: Keyboard, label: 'Ver atajos de teclado', keywords: 'ayuda teclas' },
+    { id: 'shortcuts', Icon: Keyboard, label: 'Ver atajos de teclado', keywords: 'ayuda teclas', shortcut: '?' },
     ...(activePage
       ? [
           { id: 'share', Icon: Link2, label: 'Compartir esta página', keywords: 'link publico' },
@@ -2867,7 +2867,12 @@ function Glenwyn({ user }) {
                   <span style={{ width: 16, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
                     <cmd.Icon size={14} strokeWidth={1.75} />
                   </span>
-                  <span>{cmd.label}</span>
+                  <span style={{ flex: 1 }}>{cmd.label}</span>
+                  {cmd.shortcut && (
+                    <span style={{ fontFamily: monoFont, fontSize: 11, color: t.fern, opacity: 0.55, flexShrink: 0 }}>
+                      {cmd.shortcut}
+                    </span>
+                  )}
                 </div>
               ))}
 
