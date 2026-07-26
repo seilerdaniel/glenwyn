@@ -79,6 +79,8 @@ function rowToPage(row) {
     properties: row.properties ?? null,
     fullWidth: !!row.full_width,
     locked: !!row.locked,
+    fontStyle: row.font_style || 'default',
+    smallText: !!row.small_text,
   };
 }
 
@@ -98,5 +100,7 @@ function pageToRow(page, userId) {
     properties: page.properties ?? null,
     full_width: !!page.fullWidth,
     locked: !!page.locked,
+    font_style: page.fontStyle || 'default',
+    small_text: !!page.smallText,
   };
 }

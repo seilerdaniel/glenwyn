@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { displayFont } from '../theme';
-import { Star, Trash2, MoreHorizontal, Copy, Link2, Download, History } from 'lucide-react';
+import { Star, Trash2, MoreHorizontal, Copy, Link2, Download, History, FolderInput } from 'lucide-react';
 
 export function PageRow({
   page: p,
@@ -27,6 +27,9 @@ export function PageRow({
   onShare,
   onExport,
   onViewHistory,
+  onCopyLink,
+  onCopyContent,
+  onMoveTo,
   onSetIcon,
   onDragStart,
   onDragEnd,
@@ -268,8 +271,11 @@ export function PageRow({
                     },
                     { key: 'subpage', Icon: undefined, label: 'Agregar subpágina', onClick: onAddSubpage, glyph: '+' },
                     { key: 'duplicate', Icon: Copy, label: 'Duplicar página', onClick: onDuplicate },
+                    { key: 'copy-link', Icon: Copy, label: 'Copiar enlace', onClick: onCopyLink },
                     { key: 'share', Icon: Link2, label: 'Compartir', onClick: onShare },
                     { key: 'export', Icon: Download, label: 'Exportar a Markdown', onClick: onExport },
+                    { key: 'copy-content', Icon: Copy, label: 'Copiar contenido', onClick: onCopyContent },
+                    { key: 'move-to', Icon: FolderInput, label: 'Mover a…', onClick: onMoveTo },
                     { key: 'history', Icon: History, label: 'Historial de versiones', onClick: onViewHistory },
                     { key: 'delete', Icon: Trash2, label: 'Mover a la Papelera', onClick: onDelete },
                   ].map((item) => (

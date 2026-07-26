@@ -256,7 +256,7 @@ function Block({
       onEnter(listLike.includes(block.type) ? block.type : 'text');
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       onDuplicate();
       return;

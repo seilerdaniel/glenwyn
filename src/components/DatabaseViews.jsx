@@ -20,6 +20,30 @@ export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, on
     { id: 'gallery', label: 'Galería', Icon: GalleryHorizontal },
   ];
 
+  // "Bloquear página" no tenía ningún efecto acá — DatabaseView nunca revisaba
+  // `page.locked`, así que se podían seguir agregando/editando/eliminando
+  // registros y propiedades igual. Mismo patrón que ya se usa en Block.jsx:
+  // neutralizar todos los handlers que mutan contenido en un solo lugar.
+  // onOpenRecord queda activo a propósito — abrir un registro es navegación,
+  // no una edición.
+  const noop = () => {};
+  if (page.locked) {
+    onRenameDatabase = noop;
+    onSetDatabaseIcon = noop;
+    viewProps.onRenameProperty = noop;
+    viewProps.onChangePropertyType = noop;
+    viewProps.onRemoveProperty = noop;
+    viewProps.onAddProperty = noop;
+    viewProps.onSetRelatedDatabase = noop;
+    viewProps.onSetRollupConfig = noop;
+    viewProps.onSetDefaultValue = noop;
+    viewProps.onUpdateCell = noop;
+    viewProps.onToggleRelation = noop;
+    viewProps.onRenameRecord = noop;
+    viewProps.onAddRecord = noop;
+    viewProps.onDeleteRecord = noop;
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
@@ -53,6 +77,7 @@ export function DatabaseView({ t, page, database, viewMode, onChangeViewMode, on
           className="glenwyn-focus"
           value={page.title}
           onChange={(e) => onRenameDatabase(e.target.value)}
+          readOnly={page.locked}
           placeholder="Sin título"
           style={{
             flex: 1,

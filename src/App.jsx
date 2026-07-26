@@ -48,6 +48,10 @@ import {
   Lock,
   Unlock,
   Check,
+  Copy,
+  FileText,
+  FolderInput,
+  Type,
 } from 'lucide-react';
 
 import {
@@ -116,6 +120,7 @@ function useAutoFocusOnOpen(isOpen) {
 
 function Glenwyn({ user }) {
   const [dark, setDark] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isNarrow, setIsNarrow] = useState(
     typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 640px)').matches : false
@@ -158,6 +163,11 @@ function Glenwyn({ user }) {
   const [dragId, setDragId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // { id, position: 'before'|'after'|'inside' }
   const [trashOpen, setTrashOpen] = useState(false);
+  const [moveToOpen, setMoveToOpen] = useState(false);
+  const [moveToQuery, setMoveToQuery] = useState('');
+  const [movingPageId, setMovingPageId] = useState(null);
+  const moveToModalRef = useAutoFocusOnOpen(moveToOpen);
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
   const trashModalRef = useAutoFocusOnOpen(trashOpen);
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -256,7 +266,16 @@ function Glenwyn({ user }) {
           );
         });
         setPages(loadedPages);
-        setActiveId((loadedPages.find((p) => !p.isArchived) || loadedPages[0] || {}).id || null);
+        // Idea #60 — "Copiar enlace" genera un link con #page=<id>; si alguien
+        // lo abre, mostramos esa página en vez de la última activa por defecto.
+        const hashMatch = window.location.hash.match(/^#page=(.+)$/);
+        const linkedPage = hashMatch && loadedPages.find((p) => p.id === hashMatch[1] && !p.isArchived);
+        if (linkedPage) {
+          setActiveId(linkedPage.id);
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } else {
+          setActiveId((loadedPages.find((p) => !p.isArchived) || loadedPages[0] || {}).id || null);
+        }
         setDatabases(databasesResult.status === 'fulfilled' ? databasesResult.value : []);
         setProfile(
           profileResult.status === 'fulfilled'
@@ -802,6 +821,16 @@ function Glenwyn({ user }) {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, locked: !p.locked } : p)));
   };
 
+  // "Personalizar página" — estilo de fuente y texto pequeño, dos preferencias
+  // de lectura por página (idea #60, inspiradas en el menú equivalente de Notion).
+  const setPageFontStyle = (id, fontStyle) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, fontStyle } : p)));
+  };
+
+  const toggleSmallText = (id) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, smallText: !p.smallText } : p)));
+  };
+
   // Duplicates a single page (not its subpages) as a sibling right after the original.
   const duplicatePage = (id) => {
     setPages((prev) => {
@@ -813,6 +842,10 @@ function Glenwyn({ user }) {
         id: uid(),
         title: `${original.title || 'Sin título'} (copia)`,
         pinned: false,
+        // Igual razonamiento que pinned/shareToken de acá abajo: una copia
+        // nueva debería poder editarse enseguida, no heredar el bloqueo del
+        // original — sorprendería no poder tocar la página que acabás de crear.
+        locked: false,
         createdAt: Date.now(),
         blocks: original.blocks.map((b) => ({ ...b, id: uid() })),
         // A duplicate must never inherit the original's share link — two pages can't
@@ -839,6 +872,26 @@ function Glenwyn({ user }) {
     });
   };
 
+  // Idea #60 — "Mover a". Una página no puede terminar siendo hija de sí misma
+  // ni de ninguno de sus propios descendientes (crearía un ciclo imposible de
+  // recorrer) — el modal ya filtra esas opciones de la lista, esto es una
+  // segunda barrera por si se llegara a llamar desde otro lado sin ese filtro.
+  const moveToNewParent = (pageId, newParentId) => {
+    setPages((prev) => {
+      const page = prev.find((p) => p.id === pageId);
+      if (!page) return prev;
+      const forbidden = new Set([pageId, ...getDescendantIds(prev, pageId)]);
+      if (newParentId && forbidden.has(newParentId)) return prev;
+
+      const newSiblings = prev.filter((p) => p.parentId === newParentId && p.id !== pageId);
+      return prev.map((p) => (p.id === pageId ? { ...p, parentId: newParentId, order: newSiblings.length } : p));
+    });
+    if (newParentId) setExpandedIds((e) => ({ ...e, [newParentId]: true }));
+    setMoveToOpen(false);
+    setMovingPageId(null);
+    setMoveToQuery('');
+  };
+
   const openHistory = async (pageId) => {
     setHistoryOpen(true);
     setHistoryLoading(true);
@@ -858,6 +911,38 @@ function Glenwyn({ user }) {
     const markdown = pageToMarkdown(page, livePages);
     const safeName = (page.title || 'sin-titulo').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'pagina';
     downloadTextFile(`${safeName}.md`, markdown);
+  };
+
+  // Idea #60 — dos más de la lista de acciones estilo Notion que quedaban
+  // pendientes. Copiar contenido reutiliza la misma conversión a Markdown que
+  // ya usa el export a archivo, solo que al portapapeles en vez de descargar.
+  const copyPageContent = async (page) => {
+    const markdown = pageToMarkdown(page, livePages);
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setCopyFeedback('Contenido copiado');
+    } catch (e) {
+      console.error('Glenwyn: failed to copy page content', e);
+      setCopyFeedback('No se pudo copiar');
+    }
+    setTimeout(() => setCopyFeedback(''), 2000);
+  };
+
+  // Copiar enlace no apunta a una ruta real por página (Glenwyn no usa
+  // routing por URL para navegación interna, todo vive en `activeId`) — en vez
+  // de construir un sistema de rutas completo solo para esto, se usa un hash
+  // liviano (#page=<id>) que la app ya sabe leer al cargar (ver el useEffect
+  // de inicialización), suficiente para que el link de verdad abra esa página.
+  const copyPageLink = async (pageId) => {
+    const url = `${window.location.origin}/#page=${pageId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyFeedback('Enlace copiado');
+    } catch (e) {
+      console.error('Glenwyn: failed to copy page link', e);
+      setCopyFeedback('No se pudo copiar');
+    }
+    setTimeout(() => setCopyFeedback(''), 2000);
   };
 
   // The whole workspace as a single .zip — every live page as Markdown, nested
@@ -959,6 +1044,11 @@ function Glenwyn({ user }) {
   };
 
   const restoreVersion = (pageId, entry) => {
+    const target = pagesRef.current.find((p) => p.id === pageId);
+    if (target?.locked) {
+      window.alert('Esta página está bloqueada. Desbloqueala desde el menú "⋯" antes de restaurar una versión anterior.');
+      return;
+    }
     const ok = window.confirm(
       'Esto va a reemplazar el contenido actual de la página con esta versión anterior. ¿Continuar?'
     );
@@ -1571,6 +1661,17 @@ function Glenwyn({ user }) {
           border-radius: 3px;
         }
         .glenwyn-focus:focus-visible { outline: 2px solid ${t.moss} !important; outline-offset: 2px; }
+        /* "Personalizar página" (idea #60) — en vez de tocar cada fontFamily
+           puesta a mano en Block.jsx/SpecializedBlocks.jsx (son muchas, en
+           varios tipos de bloque), esto sobreescribe con !important desde un
+           contenedor con la clase correspondiente más arriba en el árbol. */
+        .glenwyn-font-serif .glenwyn-block,
+        .glenwyn-font-serif .glenwyn-canvas-content textarea,
+        .glenwyn-font-serif .glenwyn-canvas-content input[type="text"] { font-family: ${displayFont} !important; }
+        .glenwyn-font-mono .glenwyn-block,
+        .glenwyn-font-mono .glenwyn-canvas-content textarea,
+        .glenwyn-font-mono .glenwyn-canvas-content input[type="text"] { font-family: ${monoFont} !important; }
+        .glenwyn-small-text .glenwyn-block { font-size: 13px !important; }
         /* Devices whose primary input has no hover (touch) never get a hover state to
            reveal these actions with — so show them all the time there instead. */
         @media (hover: none) {
@@ -2070,6 +2171,13 @@ function Glenwyn({ user }) {
                     setShareOpen(true);
                   }}
                   onExport={() => exportPageAsMarkdown(p)}
+                  onCopyLink={() => copyPageLink(p.id)}
+                  onCopyContent={() => copyPageContent(p)}
+                  onMoveTo={() => {
+                    setMovingPageId(p.id);
+                    setMoveToQuery('');
+                    setMoveToOpen(true);
+                  }}
                   onViewHistory={() => {
                     selectPage(p.id);
                     openHistory(p.id);
@@ -2506,6 +2614,18 @@ function Glenwyn({ user }) {
               >
                 <button
                   onClick={() => {
+                    copyPageLink(activePage.id);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Copy size={14} strokeWidth={1.75} />
+                    Copiar enlace
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
                     setShareError('');
                     setShareCopied(false);
                     setShareOpen(true);
@@ -2528,6 +2648,44 @@ function Glenwyn({ user }) {
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Download size={14} strokeWidth={1.75} />
                     Exportar
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    copyPageContent(activePage);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Copy size={14} strokeWidth={1.75} />
+                    Copiar contenido
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMovingPageId(activePage.id);
+                    setMoveToQuery('');
+                    setMoveToOpen(true);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FolderInput size={14} strokeWidth={1.75} />
+                    Mover a…
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPersonalizeOpen(true);
+                    setTopbarMenuOpen(false);
+                  }}
+                  style={topbarMenuItemStyle(t)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Type size={14} strokeWidth={1.75} />
+                    Personalizar página
                   </span>
                 </button>
                 <button
@@ -2640,7 +2798,14 @@ function Glenwyn({ user }) {
             padding: '64px 32px 120px',
           }}
         >
-          <div style={{ width: '100%', maxWidth: activeDatabase ? 920 : activePage?.fullWidth ? '100%' : 720 }}>
+          <div
+            className={[
+              activePage?.fontStyle === 'serif' ? 'glenwyn-font-serif' : '',
+              activePage?.fontStyle === 'mono' ? 'glenwyn-font-mono' : '',
+              activePage?.smallText ? 'glenwyn-small-text' : '',
+            ].filter(Boolean).join(' ')}
+            style={{ width: '100%', maxWidth: activePage?.fullWidth ? '100%' : activeDatabase ? 920 : 720 }}
+          >
             {tasksViewOpen ? (
               <TasksView
                 t={t}
@@ -2983,6 +3148,194 @@ function Glenwyn({ user }) {
         </div>
       )}
 
+      {/* ---- Mover a ---- */}
+      {moveToOpen && movingPageId && (
+        <div
+          onClick={() => setMoveToOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20,
+          }}
+        >
+          <div
+            ref={moveToModalRef}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mover página"
+            style={{
+              width: 380,
+              maxWidth: '90vw',
+              maxHeight: '70vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: t.canvas,
+              border: `1px solid ${t.clay}`,
+              borderRadius: 10,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.clay}`, fontFamily: displayFont, fontSize: 16, fontWeight: 600, color: t.bark }}>
+              Mover a…
+            </div>
+            <input
+              className="glenwyn-focus"
+              autoFocus
+              value={moveToQuery}
+              onChange={(e) => setMoveToQuery(e.target.value)}
+              placeholder="Buscar una página…"
+              style={{
+                border: 'none',
+                borderBottom: `1px solid ${t.clay}`,
+                outline: 'none',
+                background: 'transparent',
+                padding: '10px 16px',
+                fontSize: 13.5,
+                color: t.bark,
+              }}
+            />
+            <div className="glenwyn-scroll" style={{ overflowY: 'auto', padding: '4px 0' }}>
+              {(() => {
+                const forbidden = new Set([movingPageId, ...getDescendantIds(pages, movingPageId)]);
+                const movingPage = pages.find((p) => p.id === movingPageId);
+                const candidates = pages.filter(
+                  (p) => !p.isArchived && !forbidden.has(p.id) && !p.databaseId &&
+                    (!moveToQuery || (p.title || '').toLowerCase().includes(moveToQuery.toLowerCase()))
+                );
+                const rootMatches = !moveToQuery || 'sin página superior'.includes(moveToQuery.toLowerCase());
+                return (
+                  <>
+                    {rootMatches && movingPage?.parentId !== null && (
+                      <button
+                        onClick={() => moveToNewParent(movingPageId, null)}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 13.5, textAlign: 'left' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <FolderInput size={14} strokeWidth={1.75} />
+                        Sin página superior (nivel principal)
+                      </button>
+                    )}
+                    {candidates.length === 0 && !rootMatches && (
+                      <div style={{ padding: '12px 16px', fontSize: 12.5, color: t.fern }}>No encontramos ninguna página.</div>
+                    )}
+                    {candidates.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => moveToNewParent(movingPageId, p.id)}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', background: 'none', border: 'none', cursor: 'pointer', color: t.bark, fontSize: 13.5, textAlign: 'left' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {p.icon ? <span style={{ fontSize: 14 }}>{p.icon}</span> : <FileText size={14} strokeWidth={1.75} />}
+                        {p.title || 'Sin título'}
+                      </button>
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Personalizar página ---- */}
+      {personalizeOpen && activePage && (
+        <div
+          onClick={() => setPersonalizeOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Personalizar página"
+            style={{
+              width: 320,
+              maxWidth: '90vw',
+              background: t.canvas,
+              border: `1px solid ${t.clay}`,
+              borderRadius: 10,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.clay}`, fontFamily: displayFont, fontSize: 16, fontWeight: 600, color: t.bark }}>
+              Personalizar página
+            </div>
+            <div style={{ padding: 16 }}>
+              <div style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', color: t.fern, marginBottom: 8 }}>
+                Fuente
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+                {[
+                  { id: 'default', label: 'Aa', name: 'Por defecto', family: bodyFont },
+                  { id: 'serif', label: 'Aa', name: 'Serif', family: displayFont },
+                  { id: 'mono', label: 'Aa', name: 'Mono', family: monoFont },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setPageFontStyle(activePage.id, opt.id)}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '10px 8px',
+                      border: `1.5px solid ${(activePage.fontStyle || 'default') === opt.id ? t.moss : t.clay}`,
+                      borderRadius: 8,
+                      background: (activePage.fontStyle || 'default') === opt.id ? t.canvasAlt : 'transparent',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontFamily: opt.family, fontSize: 17, color: t.bark }}>{opt.label}</span>
+                    <span style={{ fontSize: 10.5, color: t.fern }}>{opt.name}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => toggleSmallText(activePage.id)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  border: `1px solid ${t.clay}`,
+                  borderRadius: 8,
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: t.bark,
+                  fontSize: 13.5,
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Type size={14} strokeWidth={1.75} />
+                  Texto pequeño
+                </span>
+                {activePage.smallText && <Check size={14} strokeWidth={2} color={t.moss} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---- Trash panel ---- */}
       {trashOpen && (
         <div
@@ -3231,6 +3584,7 @@ function Glenwyn({ user }) {
                     </div>
                     <button
                       onClick={() => restoreVersion(activePage.id, entry)}
+                      title={activePage.locked ? 'Desbloqueá la página para poder restaurar' : 'Restaurar esta versión'}
                       style={{
                         fontSize: 12,
                         color: t.moss,
@@ -3238,7 +3592,8 @@ function Glenwyn({ user }) {
                         border: `1px solid ${t.moss}`,
                         borderRadius: 6,
                         padding: '4px 8px',
-                        cursor: 'pointer',
+                        opacity: activePage.locked ? 0.4 : 1,
+                        cursor: activePage.locked ? 'not-allowed' : 'pointer',
                         flexShrink: 0,
                       }}
                     >
@@ -3755,6 +4110,28 @@ function Glenwyn({ user }) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Aviso de confirmación para "Copiar enlace" / "Copiar contenido" — se
+          desvanece solo, no requiere que nadie lo cierre. */}
+      {copyFeedback && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: t.bark,
+            color: t.canvas,
+            fontSize: 13,
+            padding: '9px 18px',
+            borderRadius: 20,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            zIndex: 100,
+          }}
+        >
+          {copyFeedback}
         </div>
       )}
     </div>
