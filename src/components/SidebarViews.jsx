@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { displayFont } from '../theme';
 import { Star, Trash2, MoreHorizontal, Copy, Link2, Download, History } from 'lucide-react';
 
@@ -34,6 +35,8 @@ export function PageRow({
 }) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [actionsMenuPos, setActionsMenuPos] = useState(null);
+  const actionsButtonRef = useRef(null);
 
   useEffect(() => {
     if (!iconPickerOpen) return;
@@ -46,7 +49,16 @@ export function PageRow({
     if (!actionsMenuOpen) return;
     const closeIt = () => setActionsMenuOpen(false);
     window.addEventListener('click', closeIt);
-    return () => window.removeEventListener('click', closeIt);
+    // El menú se renderiza en un portal, fuera del árbol que scrollea — si el
+    // árbol se mueve mientras está abierto, el botón ya no está donde el menú
+    // cree que está, así que lo más simple y correcto es cerrarlo.
+    window.addEventListener('scroll', closeIt, true);
+    window.addEventListener('resize', closeIt);
+    return () => {
+      window.removeEventListener('click', closeIt);
+      window.removeEventListener('scroll', closeIt, true);
+      window.removeEventListener('resize', closeIt);
+    };
   }, [actionsMenuOpen]);
   const isDropBefore = dropTarget && dropTarget.id === p.id && dropTarget.position === 'before';
   const isDropAfter = dropTarget && dropTarget.id === p.id && dropTarget.position === 'after';
@@ -198,8 +210,19 @@ export function PageRow({
             style={{ position: 'relative', opacity: actionsMenuOpen ? 1 : undefined }}
           >
             <button
+              ref={actionsButtonRef}
               onClick={(e) => {
                 e.stopPropagation();
+                if (!actionsMenuOpen) {
+                  const rect = actionsButtonRef.current.getBoundingClientRect();
+                  const estimatedMenuHeight = 7 * 37; // 7 ítems, ~37px cada uno
+                  const notEnoughSpaceBelow = window.innerHeight - rect.bottom < estimatedMenuHeight;
+                  setActionsMenuPos(
+                    notEnoughSpaceBelow
+                      ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+                      : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+                  );
+                }
                 setActionsMenuOpen((o) => !o);
               }}
               title="Más acciones"
@@ -216,70 +239,73 @@ export function PageRow({
             >
               <MoreHorizontal size={14} strokeWidth={1.75} />
             </button>
-            {actionsMenuOpen && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  width: 190,
-                  background: t.canvas,
-                  border: `1px solid ${t.clay}`,
-                  borderRadius: 8,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                  zIndex: 8,
-                  overflow: 'hidden',
-                }}
-              >
-                {[
-                  {
-                    key: 'pin',
-                    Icon: Star,
-                    label: p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos',
-                    onClick: onTogglePin,
-                    iconProps: { fill: p.pinned ? t.sun : 'none', color: p.pinned ? t.sun : t.fern },
-                  },
-                  { key: 'subpage', Icon: undefined, label: 'Agregar subpágina', onClick: onAddSubpage, glyph: '+' },
-                  { key: 'duplicate', Icon: Copy, label: 'Duplicar página', onClick: onDuplicate },
-                  { key: 'share', Icon: Link2, label: 'Compartir', onClick: onShare },
-                  { key: 'export', Icon: Download, label: 'Exportar a Markdown', onClick: onExport },
-                  { key: 'history', Icon: History, label: 'Historial de versiones', onClick: onViewHistory },
-                  { key: 'delete', Icon: Trash2, label: 'Mover a la Papelera', onClick: onDelete },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={(e) => {
-                      item.onClick(e);
-                      setActionsMenuOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 9,
-                      padding: '8px 12px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: t.bark,
-                      fontSize: 13,
-                      textAlign: 'left',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    {item.Icon ? (
-                      <item.Icon size={14} strokeWidth={1.75} {...(item.iconProps || {})} />
-                    ) : (
-                      <span style={{ width: 14, textAlign: 'center', color: t.fern }}>{item.glyph}</span>
-                    )}
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            {actionsMenuOpen &&
+              actionsMenuPos &&
+              createPortal(
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'fixed',
+                    top: actionsMenuPos.top,
+                    bottom: actionsMenuPos.bottom,
+                    right: actionsMenuPos.right,
+                    width: 190,
+                    background: t.canvas,
+                    border: `1px solid ${t.clay}`,
+                    borderRadius: 8,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    zIndex: 50,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {[
+                    {
+                      key: 'pin',
+                      Icon: Star,
+                      label: p.pinned ? 'Quitar de favoritos' : 'Agregar a favoritos',
+                      onClick: onTogglePin,
+                      iconProps: { fill: p.pinned ? t.sun : 'none', color: p.pinned ? t.sun : t.fern },
+                    },
+                    { key: 'subpage', Icon: undefined, label: 'Agregar subpágina', onClick: onAddSubpage, glyph: '+' },
+                    { key: 'duplicate', Icon: Copy, label: 'Duplicar página', onClick: onDuplicate },
+                    { key: 'share', Icon: Link2, label: 'Compartir', onClick: onShare },
+                    { key: 'export', Icon: Download, label: 'Exportar a Markdown', onClick: onExport },
+                    { key: 'history', Icon: History, label: 'Historial de versiones', onClick: onViewHistory },
+                    { key: 'delete', Icon: Trash2, label: 'Mover a la Papelera', onClick: onDelete },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={(e) => {
+                        item.onClick(e);
+                        setActionsMenuOpen(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 9,
+                        padding: '8px 12px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: t.bark,
+                        fontSize: 13,
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {item.Icon ? (
+                        <item.Icon size={14} strokeWidth={1.75} {...(item.iconProps || {})} />
+                      ) : (
+                        <span style={{ width: 14, textAlign: 'center', color: t.fern }}>{item.glyph}</span>
+                      )}
+                      {item.label}
+                    </button>
+                  ))}
+                </div>,
+                document.body
+              )}
           </div>
         )}
       </div>
