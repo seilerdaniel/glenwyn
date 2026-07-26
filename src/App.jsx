@@ -2392,6 +2392,7 @@ function Glenwyn({ user }) {
                 </>
               ) : (
                 <>
+                  {activePage?.id === inboxPageId && <Inbox size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} />}
                   {activePage?.locked && <Lock size={12} strokeWidth={1.75} style={{ flexShrink: 0 }} />}
                   {activePage ? activePage.title || 'Sin título' : ''}
                 </>
