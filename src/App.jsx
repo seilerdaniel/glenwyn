@@ -21,7 +21,6 @@ import {
   ListChecks,
   Unlink,
   Settings as SettingsIcon,
-  BookOpen,
   Timer,
   Link2,
   Download,
@@ -2163,53 +2162,6 @@ function Glenwyn({ user }) {
             {dark ? <Moon size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
             {sidebarOpen && <span>{dark ? 'Modo claro' : 'Modo oscuro'}</span>}
           </button>
-          <button
-            className="glenwyn-focus"
-            onClick={() => setShortcutsOpen(true)}
-            title="Atajos de teclado"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center',
-              gap: 8,
-              padding: '7px 8px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: t.fern,
-              fontSize: 13.5,
-              borderRadius: 7,
-            }}
-          >
-            <Keyboard size={15} strokeWidth={1.75} />
-            {sidebarOpen && <span>Atajos de teclado</span>}
-          </button>
-          <a
-            href="/guia.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glenwyn-focus"
-            title="Guía de uso"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center',
-              gap: 8,
-              padding: '7px 8px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: t.fern,
-              fontSize: 13.5,
-              borderRadius: 7,
-              textDecoration: 'none',
-            }}
-          >
-            <BookOpen size={15} strokeWidth={1.75} />
-            {sidebarOpen && <span>Guía de uso</span>}
-          </a>
           <button
             className="glenwyn-focus"
             onClick={() => setSettingsOpen(true)}

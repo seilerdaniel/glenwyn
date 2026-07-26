@@ -996,6 +996,20 @@ Los 4 íconos sueltos que aparecían al pasar el mouse sobre una página (favori
 
 ---
 
+## v0.80 — Idea #56: primera pasada de la auditoría del sidebar
+
+**El hallazgo real, no solo falta de organización — duplicación de verdad:** "Atajos de teclado" existía en 3 lugares (fila suelta del sidebar, menú "⋯" de la barra superior, y dentro de Ajustes → Ayuda); "Guía de uso" en 2 (fila suelta + Ajustes); "Modo oscuro/claro" en 2 (fila suelta + Ajustes → Apariencia). Eso era lo que inflaba el footer del sidebar a 7 filas.
+
+- Sacadas las filas sueltas de **"Atajos de teclado"** y **"Guía de uso"** — siguen 100% disponibles desde Ajustes, el menú "⋯", el atajo `?`, y la paleta de comandos (`⌘K`). Cero pérdida de acceso, solo se sacó la fila duplicada
+- **"Modo oscuro/claro" se mantiene como toggle rápido**, a propósito — es una preferencia que se cambia seguido (según la luz del día), a diferencia de las otras dos que son consultas ocasionales
+- Footer del sidebar: de 7 filas a 5 (Modo oscuro/claro, Deep Work, Papelera, Ajustes, Cerrar sesión + el badge de plan, no interactivo)
+
+Documentado en `BANCO_DE_IDEAS.md` (idea #56) qué quedó deliberadamente sin tocar en esta pasada (Deep Work y el badge de plan, ambos con uso genuinamente frecuente) para quien quiera profundizar más adelante.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 

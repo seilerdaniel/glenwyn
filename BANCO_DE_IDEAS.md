@@ -275,8 +275,16 @@ Al crear, Notion muestra un modal con sugerencias (Seguimiento de tareas, Proyec
 
 Pendiente, sin arrancar: soporte inline (insertar como bloque dentro de una página existente, no solo como página completa), selector de tipo de vista al crear (en vez de arrancar siempre en modo tabla), y todo lo demás de la referencia de arriba.
 
-### 56. Auditoría de arquitectura de información del sidebar 🟡 — **pendiente, sin hacer todavía**
-Señalado directamente: las opciones del sidebar (Ajustes, Atajos, Guía de uso, Deep Work, Modo oscuro, Papelera, Cerrar sesión, plan actual) están todas sueltas, una debajo de la otra, sin ningún agrupamiento — a diferencia de Notion, que las organiza en menús (Cuenta, Espacio de trabajo, Funciones, Admin, Acceso y facturación — ver capturas). Vale una revisión completa de qué va en el sidebar directo, qué va agrupado dentro de Ajustes, y qué merecería su propio menú aparte — no es un ajuste chico, es repensar la organización completa.
+### 56. Auditoría de arquitectura de información del sidebar 🟡 — ✅ primera pasada hecha (v0.80)
+Señalado directamente: las opciones del sidebar (Ajustes, Atajos, Guía de uso, Deep Work, Modo oscuro, Papelera, Cerrar sesión, plan actual) estaban todas sueltas, una debajo de la otra, sin ningún agrupamiento.
+
+**El hallazgo real, al revisar:** no era solo falta de organización — había **duplicación de verdad**. "Atajos de teclado" existía en 3 lugares (fila suelta del sidebar, menú "⋯" de la barra superior, y dentro de Ajustes → Ayuda); "Guía de uso" en 2 lugares (fila suelta + Ajustes); "Modo oscuro/claro" en 2 lugares (fila suelta + Ajustes → Apariencia). Eso es lo que inflaba el footer a 7 filas.
+
+**Arreglado:** se sacaron las filas sueltas de "Atajos de teclado" y "Guía de uso" del sidebar — siguen 100% disponibles desde Ajustes → Ayuda, desde el menú "⋯" de la barra superior, desde el atajo `?`, y desde la paleta de comandos (`⌘K`), así que no se perdió ningún acceso, solo la fila duplicada. "Modo oscuro/claro" se dejó como toggle rápido en el sidebar a propósito — es una preferencia que se cambia seguido (según la luz del día, por ejemplo), a diferencia de las otras dos que son consultas ocasionales.
+
+**Footer del sidebar, de 7 filas a 5:** Modo oscuro/claro, Deep Work, Papelera, Ajustes, Cerrar sesión (más el badge de plan, que no es interactivo).
+
+Sigue pendiente, si se quiere profundizar más: evaluar si Deep Work y el badge de plan también merecen vivir dentro de Ajustes en vez de sueltos — no se tocó en esta pasada por ser dos casos con uso genuinamente frecuente (Deep Work se inicia seguido; el plan es información que conviene tener siempre a la vista).
 
 ### 57. Fix ya hecho: el triángulo sin contexto junto a "+ Nueva página" ✅
 Reportado como si no tuviera función — en realidad sí abre el menú de plantillas, pero un carácter suelto "▾" sin ningún otro indicio visual es indistinguible de un adorno roto. Reemplazado por un ícono de línea (`ChevronDown` de lucide) con `aria-label` explícito, como parte de esta misma tanda.
