@@ -17,6 +17,26 @@ export const emptyPage = (title = 'Sin título', parentId = null, order = 0) => 
   pinned: false,
 });
 
+// Tarea 3/4 (revisión de la experiencia de un usuario nuevo) — hasta ahora,
+// una cuenta recién creada arrancaba con esta misma página, pero completamente
+// vacía: un solo bloque de texto sin nada escrito. Alguien que se registra a
+// un "second brain" con funciones ricas no tenía ninguna guía de por dónde
+// empezar. Este contenido reemplaza ese bloque en blanco.
+export function welcomePageBlocks() {
+  return [
+    tplBlock('heading', 'Bienvenido a Glenwyn'),
+    tplBlock('text', 'Esto es un segundo cerebro, pensado para escribir sin ruido — no para organizar por organizar. Esta página es tuya para editar o borrar cuando quieras.'),
+    tplBlock('heading', 'Para probar en los primeros minutos'),
+    tplBlock('todo', 'Escribí [[así]] en medio de una oración para conectar dos páginas'),
+    tplBlock('todo', 'Probá el Modo Zen (⌘/Ctrl + .) para escribir sin distracciones'),
+    tplBlock('todo', 'Creá una base de datos desde "+ Nueva página" en el sidebar'),
+    tplBlock('todo', 'Mirá la Bandeja de entrada — el lugar para anotar algo rápido sin pensar dónde va'),
+    tplBlock('callout', 'Todo lo que escribas es privado — solo vos podés verlo, ni siquiera nosotros.'),
+    tplBlock('heading', 'Si querés profundizar'),
+    tplBlock('text', 'La guía de uso completa está en /guia.html, siempre disponible desde Ajustes.'),
+  ];
+}
+
 export const tplBlock = (type, content = '', extra = {}) => ({ id: uid(), type, content, ...extra });
 
 // Predefined starting points for a new page — pure structure, no backend involved.

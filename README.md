@@ -10,7 +10,7 @@ Un espacio de trabajo inmersivo y distraction-free, inspirado en Notion. Cozy, m
 ## Setup
 
 ### 1. Base de datos
-Andá al **SQL Editor** de tu proyecto en supabase.com y corré, en orden, `001_init.sql`, `002_pinned.sql`, `003_page_versions.sql`, `004_storage.sql`, `005_sharing.sql`, `006_databases.sql`, `007_profiles.sql`, `008_admin.sql`, `009_waitlist.sql`, `010_waitlist_hardening.sql`, `011_page_display_options.sql` y `012_page_personalization.sql`. El primero crea la tabla `pages` con Row Level Security habilitado (cada usuario solo ve sus propias páginas); el segundo agrega la columna `pinned` para favoritos; el tercero crea la tabla de historial de versiones; el cuarto crea el bucket de Storage para subir imágenes de verdad; el quinto habilita compartir páginas por link de solo lectura; el sexto agrega las bases de datos estilo Notion; el séptimo agrega el plan de usuario (Free/Plus/Business) para el modelo freemium; el octavo agrega el flag de administrador y se lo otorga a `dseiler.dev@gmail.com`; el noveno agrega la tabla de interesados para la página de validación de precios; el décimo agrega protección básica contra spam a esa tabla; el undécimo agrega ancho completo y bloqueo de página; el duodécimo agrega estilo de fuente y texto pequeño.
+Andá al **SQL Editor** de tu proyecto en supabase.com y corré, en orden, `001_init.sql`, `002_pinned.sql`, `003_page_versions.sql`, `004_storage.sql`, `005_sharing.sql`, `006_databases.sql`, `007_profiles.sql`, `008_admin.sql`, `009_waitlist.sql`, `010_waitlist_hardening.sql`, `011_page_display_options.sql`, `012_page_personalization.sql` y `013_error_logs.sql`. El primero crea la tabla `pages` con Row Level Security habilitado (cada usuario solo ve sus propias páginas); el segundo agrega la columna `pinned` para favoritos; el tercero crea la tabla de historial de versiones; el cuarto crea el bucket de Storage para subir imágenes de verdad; el quinto habilita compartir páginas por link de solo lectura; el sexto agrega las bases de datos estilo Notion; el séptimo agrega el plan de usuario (Free/Plus/Business) para el modelo freemium; el octavo agrega el flag de administrador y se lo otorga a `dseiler.dev@gmail.com`; el noveno agrega la tabla de interesados para la página de validación de precios; el décimo agrega protección básica contra spam a esa tabla; el undécimo agrega ancho completo y bloqueo de página; el duodécimo agrega estilo de fuente y texto pequeño; el decimotercero agrega la tabla de registro de errores.
 
 El proyecto ya incluye `vercel.json` con un rewrite necesario para que los links de `/share/...` funcionen en producción (sin esto, abrir un link compartido directamente daría 404). Ese mismo rewrite excluye explícitamente `/guia.html`, para que la guía de uso se sirva como archivo estático real en vez de redirigir a la app.
 
@@ -49,6 +49,12 @@ npm install
 npm run dev
 ```
 
+### 6. Correr los tests
+```bash
+npm test
+```
+Cubren las funciones puras de `lib/pageUtils.js` (árbol de páginas, backlinks, rollups, atajos de markdown, y más) — no hay tests de componentes de React todavía, solo de la lógica que no depende de la interfaz.
+
 ## Estructura
 ```
 src/
@@ -73,6 +79,7 @@ supabase/migrations/
   010_waitlist_hardening.sql — email único + formato válido en waitlist_signups (protección básica contra spam)
   011_page_display_options.sql — full_width y locked en pages (ancho completo + bloquear página)
   012_page_personalization.sql — font_style y small_text en pages (personalizar página)
+  013_error_logs.sql       — tabla de registro de errores del cliente (observabilidad)
 ```
 
 ## Features actuales
@@ -100,6 +107,7 @@ supabase/migrations/
 - **Copiar enlace y Copiar contenido**: dos acciones nuevas, disponibles tanto en la barra superior como en el menú de cada fila del árbol. "Copiar enlace" genera un link con `#page=<id>` que la app sabe abrir directo en esa página al cargar; "Copiar contenido" copia la página completa como Markdown al portapapeles
 - **Mover a**: modal con buscador para mandar una página a ser hija de otra (o al nivel principal), en los mismos dos menús "⋯". Filtra la propia página y sus descendientes de los destinos posibles
 - **Personalizar página**: estilo de fuente (Por defecto/Serif/Mono) y texto pequeño, guardados por página
+- **Registro de errores en producción**: `ErrorBoundary` de React (evita que un error de render deje la pantalla en blanco sin ningún aviso), más manejadores globales para excepciones no capturadas y promesas rechazadas sin `.catch`. Todo se guarda en una tabla nueva de Supabase (`error_logs`, migración `013_error_logs.sql`) — revisable desde el Table Editor, sin necesitar una cuenta nueva en un servicio externo tipo Sentry
 - **Rediseño de íconos con `lucide-react`** (completo): toda la app usa íconos de línea vectoriales en vez de emoji — sidebar, barra superior, paleta de comandos, bases de datos, bloques, tareas, callout, contraseña, favoritos, papelera, ordenar, landing page, vista pública compartida. Se ven igual en cualquier sistema operativo, a diferencia de los emoji (que Windows renderiza distinto que Mac). Los íconos de página elegidos por el usuario (la paleta de emoji para personalizar páginas) quedan como emoji a propósito — es una función de personalización, no iconografía de la app
 - **Nueva paleta "Miel dorada"**: dorado como acento principal en vez de verde — elegida para diferenciarse de la competencia (ninguno de los competidores directos usa dorado/miel como color de marca). Verificada con contraste real WCAG AA en ambos modos (claro/oscuro) antes de aplicarla — la primera versión de la propuesta fallaba en el texto secundario (2.87:1) y quedaba al límite en los links/botones (3.16:1), corregido oscureciendo esos dos tonos sin perder el matiz dorado
 - **Paleta de comandos** (`⌘/Ctrl+K`): ya no es solo buscador de páginas — ahora también ejecuta acciones (nueva página, nueva base de datos, Bandeja de entrada, Mis tareas, Notas huérfanas, Modo Zen, Deep Work, modo oscuro/claro, Papelera, Ajustes, atajos, y compartir/historial de la página activa), todo mezclado en una sola lista con navegación por flechas ↑↓

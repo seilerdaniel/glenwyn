@@ -1128,6 +1128,55 @@ Dos más de la lista de acciones estilo Notion, en la barra superior y en el men
 
 ---
 
+## v0.91 — Tarea 1/4: dividir App.jsx otra vez (4.163 → 3.873 líneas)
+
+Había vuelto a crecer después de todo lo agregado en esta sesión. Se extrajeron los 3 modales más autocontenidos a un archivo nuevo (`src/components/AppModals.jsx`): **Mover a**, **Personalizar página**, y **Atajos de teclado** (este último, contenido puramente estático, el más simple y de menor riesgo de los tres).
+
+**Quedan sin extraer, para una próxima pasada:** Papelera, Historial de versiones, Compartir, Ajustes (los cuatro modales más grandes y con más handlers entrelazados), y el bloque completo del sidebar (~1.200 líneas) — mucho más riesgoso de tocar por cómo está entrelazado con drag-and-drop, búsqueda, y el árbol de páginas.
+
+`npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.92 — Tarea 2/4: primeros tests automatizados del proyecto
+
+Hasta ahora, cero archivos de test en todo el repo — la única forma de saber si algo se rompía era revisarlo a mano o que vos lo notaras usando la app. Se instaló `vitest` (el runner que mejor encaja con Vite, mismo ecosistema) y se escribieron 49 tests para las funciones puras de `pageUtils.js`, priorizando las que ya tuvieron bugs reales antes:
+
+- **El ciclo de rollups** (Fase C) — el bug real de `Number(null) === 0` enmascarando un ciclo A→B→A tiene ahora un test dedicado, para que ese bug específico no pueda volver sin que un test lo note
+- **`movePage`** (arrastrar y soltar en el árbol) — la función con la que casi hubo un choque de nombres real esta sesión — cubierta con tests de reordenamiento, mover adentro de otra página, y prevención de ciclos
+- Árbol de páginas (`childrenOf`, `isDescendant`, `getDescendantIds`, `getAncestorChain`), backlinks/huérfanas/madurez (segundo cerebro), atajos de markdown, detección de URLs de imagen/embed, y utilidades de propiedades de bases de datos
+
+Un test propio (`cuenta palabras de content y body juntos`) falló al principio — no por un bug en la función, sino porque mi expectativa estaba mal calculada (me olvidé de que el encabezado de un bloque "toggle" también cuenta como palabras). Corregido antes de commitear.
+
+`npm test` corre los 49 tests. `npm run build` y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.93 — Tarea 3/4: la página "Bienvenida" ya no está vacía
+
+**El hallazgo:** una cuenta nueva arrancaba con una página llamada "Bienvenida" — pero completamente vacía, un solo bloque de texto en blanco. Alguien que se registra a un "second brain" con funciones ricas (bases de datos, backlinks, Modo Zen, Deep Work) no tenía ninguna guía de por dónde empezar, ni una sola pista de qué hace Glenwyn.
+
+- **`welcomePageBlocks()`** en `pageUtils.js`: encabezados, un checklist de 4 cosas para probar en los primeros minutos (mencionar `[[así]]`, Modo Zen, crear una base de datos, la Bandeja de entrada), un callout sobre privacidad, y una mención a la guía de uso completa
+- Conectado en los 2 lugares donde se crea esta página (la carga inicial normal, y el camino de emergencia si falla cargar los datos)
+- 2 tests nuevos para la función (51 en total ahora)
+
+`npm run build`, `npm test`, y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
+## v0.94 — Tarea 4/4: observabilidad — errores en producción, sin cuenta nueva en un servicio externo
+
+Cierra la ronda de las 4 tareas. Hasta ahora, si a un usuario real le salía un error, no había forma de enterarse salvo que escribiera.
+
+- **`ErrorBoundary`** de React (`main.jsx`), envolviendo toda la app — sin esto, un error de render deja la pantalla completamente en blanco, sin ningún mensaje. Ahora muestra una pantalla simple con un botón de recargar, y registra el error antes de mostrarla
+- **Manejadores globales** para excepciones de JS no capturadas (`window.onerror`) y promesas rechazadas sin `.catch` (`unhandledrejection`) — las otras dos formas comunes en que algo falla sin que React se entere
+- **`error_logs`** — tabla nueva en el mismo proyecto de Supabase que ya se usa para todo lo demás (migración `013_error_logs.sql`), en vez de pedir una cuenta nueva en un servicio tipo Sentry. Revisable desde el Table Editor. RLS: cualquier usuario logueado puede insertar (nunca leer) — la política de "solo insertar" no distingue de quién es cada error a propósito, para no arriesgar que una política mal armada silencie un error real
+- `logError()` es deliberadamente a prueba de fallos — si el guardado en sí falla (sin conexión, etc.), se traga el error en vez de generar uno segundo a partir del primero
+
+`npm run build`, `npm test` (51 tests), y `npm run lint` siguen en **0 errores, 0 warnings**.
+
+---
+
 ## Todos los bloques disponibles hoy
 Texto, encabezado, tarea, lista con viñetas, lista numerada, cita, callout, desplegable (toggle), imagen (URL o upload real), tabla simple, embed (YouTube/Vimeo/Loom/Spotify/genérico), link a otra página, divisor.
 
