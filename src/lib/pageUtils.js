@@ -629,7 +629,7 @@ export function getAllTasks(pages) {
   for (const p of pages) {
     if (p.isArchived) continue;
     for (const b of p.blocks) {
-      if (b.type === 'todo' && b.dueDate) {
+      if (b.type === 'todo') {
         tasks.push({
           pageId: p.id,
           pageTitle: p.title || 'Sin título',
@@ -637,14 +637,14 @@ export function getAllTasks(pages) {
           blockId: b.id,
           content: b.content,
           checked: !!b.checked,
-          dueDate: b.dueDate,
+          dueDate: b.dueDate || null,
           priority: b.priority || null,
           recurrence: b.recurrence || null,
         });
       }
     }
   }
-  return tasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return tasks.sort((a, b) => (a.dueDate && b.dueDate ? a.dueDate.localeCompare(b.dueDate) : a.dueDate ? -1 : b.dueDate ? 1 : 0));
 }
 
 // Given a task's current due date and its recurrence rule, returns the ISO date

@@ -1,5 +1,5 @@
 import React from 'react';
-import { displayFont, monoFont, bodyFont } from '../theme';
+import { displayFont, monoFont, bodyFont, elevation } from '../theme';
 import { FolderInput, FileText, Type, Check } from 'lucide-react';
 
 // ---- Mover a ----
@@ -44,9 +44,9 @@ export function MoveToModal({
           display: 'flex',
           flexDirection: 'column',
           background: t.canvas,
-          border: `1px solid ${t.clay}`,
+          border: `1px solid ${t.modalBorder}`,
           borderRadius: 10,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+          boxShadow: elevation.modal,
           overflow: 'hidden',
         }}
       >
@@ -118,7 +118,7 @@ export function PersonalizeModal({
         role="dialog"
         aria-modal="true"
         aria-label="Personalizar página"
-        style={{ width: 320, maxWidth: '90vw', background: t.canvas, border: `1px solid ${t.clay}`, borderRadius: 10, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', overflow: 'hidden' }}
+        style={{ width: 320, maxWidth: '90vw', background: t.canvas, border: `1px solid ${t.modalBorder}`, borderRadius: 10, boxShadow: elevation.modal, overflow: 'hidden' }}
       >
         <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.clay}`, fontFamily: displayFont, fontSize: 16, fontWeight: 600, color: t.bark }}>
           Personalizar página
@@ -177,7 +177,8 @@ const SHORTCUT_SECTIONS = [
     ['⌘ / Ctrl + K', 'Buscar páginas o ejecutar un comando (↑↓ para navegar)'],
     ['⌘ / Ctrl + Shift + N', 'Nueva página'],
     ['⌘ / Ctrl + Shift + B', 'Nueva base de datos'],
-    ['⌘ / Ctrl + Shift + I', 'Captura rápida — ir a la Bandeja de entrada y empezar a escribir'],
+    ['⌘ / Ctrl + Shift + G', 'Captura rápida — ir a la Bandeja de entrada y empezar a escribir'],
+    ['⌘ / Ctrl + Shift + I', 'Abrir / cerrar el Inspector (backlinks, grafo, notas relacionadas)'],
     ['⌘ / Ctrl + Shift + T', 'Ver Mis tareas'],
     ['⌘ / Ctrl + Shift + H', 'Ver Notas huérfanas'],
     ['⌘ / Ctrl + .', 'Modo Zen — oculta todo menos lo que estás escribiendo'],
@@ -231,9 +232,9 @@ export function ShortcutsModal({ t, shortcutsOpen, setShortcutsOpen, shortcutsMo
           display: 'flex',
           flexDirection: 'column',
           background: t.canvas,
-          border: `1px solid ${t.clay}`,
+          border: `1px solid ${t.modalBorder}`,
           borderRadius: 10,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+          boxShadow: elevation.modal,
           overflow: 'hidden',
         }}
       >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { displayFont, monoFont } from '../theme';
+import { displayFont, monoFont, elevation } from '../theme';
 import { Table2, LayoutGrid, Calendar as CalendarIcon, GalleryHorizontal, Database, X, ExternalLink, Trash2, Pencil, Check } from 'lucide-react';
 import { IconPicker } from './SidebarViews';
 import {
@@ -707,8 +707,9 @@ export function RelationCell({ t, property, record, databases, allPages, onToggl
             background: t.canvas,
             border: `1px solid ${t.clay}`,
             borderRadius: 8,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            boxShadow: elevation.menu,
             zIndex: 8,
+            animation: 'glenwyn-popper 160ms ease-out',
           }}
         >
           {candidates.length === 0 ? (

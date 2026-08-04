@@ -2,20 +2,20 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { storage } from './lib/storage';
 import { loadPages, savePages, enableSharing, disableSharing, rotateSharing } from './lib/pagesRepo';
 import { loadDatabases, createDatabase, updateDatabaseProperties } from './lib/databasesRepo';
-import { loadProfile } from './lib/profileRepo';
+import { loadProfile, defaultProfile, canCreateDatabase, canUploadFile, canAddDatabaseRow, MAX_DB_ROWS } from './lib/profileRepo';
 import { exportWorkspaceToZip, downloadBlob } from './lib/backupExport';
 import { saveVersion, listVersions } from './lib/versionsRepo';
 import { uploadImage, deleteUploadedImagesForBlocks } from './lib/storageRepo';
 import { supabase } from './lib/supabaseClient';
 import AuthGate from './components/AuthGate';
-import { tokens, displayFont, bodyFont, monoFont } from './theme';
+import { tokens, displayFont, bodyFont, monoFont, motion } from './theme';
 const SharedPageView = React.lazy(() => import('./components/SharedPageView'));
 const WaitlistPage = React.lazy(() => import('./components/WaitlistPage'));
 import PlansComparison from './components/PlansComparison';
 import { MoveToModal, PersonalizeModal, ShortcutsModal } from './components/AppModals';
 import { logError } from './lib/errorLoggingRepo';
 import { DatabaseView } from './components/DatabaseViews';
-import { TasksView, OrphanPagesView, MiniGraphMap } from './components/SecondBrainViews';
+import { TasksView, OrphanPagesView, MiniGraphMap, RelatedNotesSuggestions, InspectorDrawer } from './components/SecondBrainViews';
 import { PageRow, IconPicker, EmptyState } from './components/SidebarViews';
 import Block from './components/Block';
 import {
@@ -53,7 +53,13 @@ import {
   Copy,
   FolderInput,
   Type,
+  PanelRight,
+  Search,
+  Network,
+  ChevronRight,
 } from 'lucide-react';
+
+const VIEW_MODES_KEY = 'glenwyn:viewModes';
 
 import {
   uid,
@@ -62,7 +68,6 @@ import {
   PAGE_TEMPLATES,
   getDescendantIds,
   TRASH_RETENTION_MS,
-  VERSION_SNAPSHOT_INTERVAL_MS,
   numberedListPosition,
   countWords,
   pageMatchesQuery,
@@ -85,6 +90,10 @@ import {
   movePage,
   movePageToRootEnd,
 } from './lib/pageUtils';
+import { findRelatedPages } from './lib/relatedNotes';
+import { useAutosave } from './hooks/useAutosave';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useAutoFocusOnOpen } from './hooks/useAutoFocusOnOpen';
 
 
 function topbarMenuItemStyle(t) {
@@ -101,23 +110,6 @@ function topbarMenuItemStyle(t) {
     padding: '9px 12px',
     borderBottom: `1px solid ${t.clay}`,
   };
-}
-
-// Every modal in the app opens without moving focus into it — someone using a
-// keyboard or screen reader would open "Compartir" or "Ajustes" and still have
-// focus sitting wherever it was on the page behind it. This hook fixes that
-// once, reused across every modal instead of patching each one separately:
-// focus lands on the modal's own container the moment it opens, which is
-// enough for a screen reader to announce the dialog and its label, and lets
-// Tab naturally reach the first real control inside from there.
-function useAutoFocusOnOpen(isOpen) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (isOpen && ref.current) {
-      ref.current.focus();
-    }
-  }, [isOpen]);
-  return ref;
 }
 
 function Glenwyn({ user }) {
@@ -145,11 +137,17 @@ function Glenwyn({ user }) {
   const [pages, setPages] = useState([]);
   const [databases, setDatabases] = useState([]);
   const [profile, setProfile] = useState(null); // { userId, plan, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd }
-  const [databaseViewModes, setDatabaseViewModes] = useState({}); // databaseId -> 'table' | 'board' | 'calendar'
+  const [databaseViewModes, setDatabaseViewModes] = useState(() => {
+    // databaseId -> 'table' | 'board' | 'calendar'
+    if (typeof localStorage === 'undefined') return {};
+    try {
+      return JSON.parse(localStorage.getItem(VIEW_MODES_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  });
   const [activeId, setActiveId] = useState(null);
   const [loaded, setLoaded] = useState(false);
-  const [saveState, setSaveState] = useState('idle'); // idle | saving | saved
-  const [saveError, setSaveError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -185,31 +183,58 @@ function Glenwyn({ user }) {
   const [shareCopied, setShareCopied] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const shortcutsModalRef = useAutoFocusOnOpen(shortcutsOpen);
+  const [showInspector, setShowInspector] = useState(() => {
+    // Persisted per-device, not synced — whether the right-hand Inspector drawer
+    // is open or closed. Same opt-in feel as the sidebar being open/closed.
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      return JSON.parse(localStorage.getItem('glenwyn:showInspector') || 'false');
+    } catch {
+      return false;
+    }
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsModalRef = useAutoFocusOnOpen(settingsOpen);
   const [plansExpanded, setPlansExpanded] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState(null); // string | null
   const [deleteAccountStep, setDeleteAccountStep] = useState('idle'); // idle | confirming | deleting | error
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [backupExporting, setBackupExporting] = useState(false);
   const [backupProgress, setBackupProgress] = useState({ done: 0, total: 0 });
   const [tasksViewOpen, setTasksViewOpen] = useState(false);
   const [orphansViewOpen, setOrphansViewOpen] = useState(false);
+  const [secondBrainOpen, setSecondBrainOpen] = useState(true);
   const [topbarMenuOpen, setTopbarMenuOpen] = useState(false);
   const [titleIconPickerOpen, setTitleIconPickerOpen] = useState(false);
   const searchInputRef = useRef(null);
-  const saveTimer = useRef(null);
   const knownIds = useRef(new Set()); // ids present in Supabase as of the last successful save
   const blockRefs = useRef({}); // blockId -> focusable DOM node, used to focus the previous block after a delete
   const pagesRef = useRef(pages); // always holds the latest `pages`, so a queued retry never saves stale data
   const activeIdRef = useRef(activeId); // same idea, for knowing which page to auto-snapshot
   const inboxPageIdRef = useRef(null); // same idea again — the global shortcut effect below only runs once
-  const isSavingRef = useRef(false);
-  const pendingSaveRef = useRef(false);
-  const lastVersionAtRef = useRef({}); // pageId -> timestamp of the last snapshot taken this session
 
   useEffect(() => {
     pagesRef.current = pages;
   }, [pages]);
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(VIEW_MODES_KEY, JSON.stringify(databaseViewModes));
+    } catch {
+      // persistencia best-effort; si falla, la vista solo queda en memoria
+    }
+  }, [databaseViewModes]);
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem('glenwyn:showInspector', JSON.stringify(showInspector));
+    } catch {
+      // best-effort; si falla, el drawer simplemente no recuerda su estado
+    }
+  }, [showInspector]);
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -283,7 +308,7 @@ function Glenwyn({ user }) {
         setProfile(
           profileResult.status === 'fulfilled'
             ? profileResult.value
-            : { userId: user.id, plan: 'free', isAdmin: false, stripeCustomerId: null, stripeSubscriptionId: null, currentPeriodEnd: null }
+            : defaultProfile(user.id)
         );
         if (profileResult.status === 'rejected') {
           console.error('Glenwyn: failed to load profile (falling back to free plan locally)', profileResult.reason);
@@ -324,57 +349,16 @@ function Glenwyn({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `user` only changes via a full remount of Glenwyn, never goes stale here
   }, []);
 
-  // Saves `pagesRef.current` (always the latest state) to Supabase. Guarded against overlapping
-  // calls: if a save is already in flight when this fires again, it just flags a pending retry
-  // instead of racing two saves against the same `knownIds` snapshot.
-  const flushSave = useCallback(async () => {
-    if (isSavingRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-    isSavingRef.current = true;
-    try {
-      await savePages(user.id, pagesRef.current, knownIds.current);
-      knownIds.current = new Set(pagesRef.current.map((p) => p.id));
-      setSaveError('');
-      setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 1500);
-
-      // Best-effort version snapshot of whatever page is currently open — throttled so
-      // typing doesn't spam the versions table. Never blocks or fails the actual save.
-      const current = pagesRef.current.find((p) => p.id === activeIdRef.current);
-      if (current && !current.isArchived) {
-        const lastAt = lastVersionAtRef.current[current.id] || 0;
-        if (Date.now() - lastAt > VERSION_SNAPSHOT_INTERVAL_MS) {
-          lastVersionAtRef.current[current.id] = Date.now();
-          saveVersion(user.id, current).catch((e) =>
-            console.error('Glenwyn: failed to save version snapshot', e)
-          );
-        }
-      }
-    } catch (e) {
-      console.error('Glenwyn: failed to save pages', e);
-      setSaveState('idle');
-      setSaveError('No se pudo guardar. Revisá tu conexión.');
-    } finally {
-      isSavingRef.current = false;
-      if (pendingSaveRef.current) {
-        pendingSaveRef.current = false;
-        flushSave();
-      }
-    }
-  }, [user.id]);
-
-  // ---- Persist pages to Supabase (debounced autosave) ----
-  useEffect(() => {
-    if (!loaded) return;
-    setSaveState('saving');
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      flushSave();
-    }, 500);
-    return () => clearTimeout(saveTimer.current);
-  }, [pages, loaded, flushSave]);
+  // Autosave (debounced) + persistencia a Supabase, y atajos de teclado
+  // globales — ambos extraídos a src/hooks/ (refactor progresivo de App.jsx).
+  const { saveState, saveError, setSaveError, lastVersionAtRef } = useAutosave({
+    user,
+    pages,
+    loaded,
+    pagesRef,
+    activeIdRef,
+    knownIds,
+  });
 
   // ---- Persist prefs (device-local UI state — not synced to Supabase) ----
   useEffect(() => {
@@ -404,100 +388,8 @@ function Glenwyn({ user }) {
   }, []);
 
   // ---- Keyboard shortcuts ----
-  useEffect(() => {
-    const handler = (e) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === '\\') {
-        e.preventDefault();
-        setSidebarOpen((s) => !s);
-      }
-      if (mod && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen((s) => !s);
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        quickCaptureToInbox();
-      }
-      if (mod && e.key === '.') {
-        e.preventDefault();
-        setZenMode((f) => !f);
-        setDeepWorkActive(false);
-      }
-      if (e.key === '?' && !mod) {
-        // Only toggle when not actively typing — otherwise typing a literal "?" in a
-        // note would hijack the keystroke and pop this open instead.
-        const el = document.activeElement;
-        const isTyping = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-        if (!isTyping) {
-          e.preventDefault();
-          setShortcutsOpen((s) => !s);
-        }
-      }
-      // Atajos nuevos — todos ⌘/Ctrl+Shift+[letra], salvo Ajustes que usa la
-      // convención estándar de macOS (⌘,) para preferencias. Cada uno llama al
-      // mismo dispatcher que ya usa la paleta de comandos, vía la ref para no
-      // quedar pegado a datos viejos (ver comentario junto a runPaletteCommandRef).
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        runPaletteCommandRef.current('new-page');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        runPaletteCommandRef.current('new-database');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
-        e.preventDefault();
-        runPaletteCommandRef.current('tasks');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'h') {
-        e.preventDefault();
-        runPaletteCommandRef.current('orphans');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        runPaletteCommandRef.current('deep-work');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        runPaletteCommandRef.current('dark-mode');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        runPaletteCommandRef.current('trash');
-      }
-      if (mod && !e.shiftKey && e.key === ',') {
-        e.preventDefault();
-        runPaletteCommandRef.current('settings');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (activeIdRef.current) runPaletteCommandRef.current('share');
-      }
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        if (activeIdRef.current) runPaletteCommandRef.current('history');
-      }
-      if (e.key === 'Escape') {
-        setSearchOpen(false);
-        setTrashOpen(false);
-        setTemplateMenuOpen(false);
-        setHistoryOpen(false);
-        setShareOpen(false);
-        setShortcutsOpen(false);
-        setTasksViewOpen(false);
-        setTopbarMenuOpen(false);
-        setOrphansViewOpen(false);
-        setZenMode(false);
-        setDeepWorkActive(false);
-        setSettingsOpen(false);
-        setDeepWorkMenuOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- quickCaptureToInbox only touches stable setters and refs; every other action goes through runPaletteCommandRef, always safe to close over once
-  }, []);
+  // (atajos globales extraídos a src/hooks/useKeyboardShortcuts.js — el hook se
+  // llama más abajo, junto a runPaletteCommandRef, porque necesita ambas cosas)
 
   useEffect(() => {
     if (searchOpen && searchInputRef.current) {
@@ -556,7 +448,10 @@ function Glenwyn({ user }) {
     setActiveId(id);
     setTasksViewOpen(false);
     setOrphansViewOpen(false);
-    if (isNarrow) setSidebarOpen(false);
+    if (isNarrow) {
+      setSidebarOpen(false);
+      setShowInspector(false);
+    }
     setNavigationTrail((prev) => [id, ...prev.filter((x) => x !== id)].slice(0, 8));
   };
   const breadcrumbChain = useMemo(
@@ -573,6 +468,63 @@ function Glenwyn({ user }) {
     () => (activePage ? getOutgoingLinks(pages, activePage.id) : []),
     [pages, activePage]
   );
+
+  // FASE 2 — Sugerencias de notas relacionadas. El cálculo vive en un helper puro
+  // (findRelatedPages en src/lib/relatedNotes.js); acá lo dejamos en un efecto
+  // debounced de 400ms para no recalcular sobre cada tecla mientras se escribe.
+  const [relatedSuggestions, setRelatedSuggestions] = useState([]);
+  useEffect(() => {
+    if (!activePage) {
+      setRelatedSuggestions([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      setRelatedSuggestions(findRelatedPages(pages, activePage, { limit: 5, minScore: 0.5 }));
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [pages, activePage]);
+
+  // Inserta "[[Título]]" en el bloque que tiene foco en la página activa (o en el
+  // último bloque de texto si ninguno está enfocado). Sin hacer fork de la lógica
+  // de menciones: un [[Título]] literal ya se enlaza por título al renderizar.
+  const insertRelatedLink = (targetPage) => {
+    if (!activePage || !targetPage) return;
+    const title = targetPage.title || 'Sin título';
+    const link = `[[${title}]]`;
+
+    const blockNodes = blockRefs.current;
+    let targetNode = null;
+    let targetBlockId = null;
+    for (const [blockId, node] of Object.entries(blockNodes)) {
+      if (node && node.contains(document.activeElement)) {
+        targetNode = node;
+        targetBlockId = blockId;
+        break;
+      }
+    }
+
+    if (!targetBlockId) {
+      // Ningún bloque con foco: inserto al final del primer bloque de texto.
+      const firstText = activePage.blocks.find((b) => b.type === 'text');
+      if (firstText) {
+        targetBlockId = firstText.id;
+        updateBlock(activePage.id, firstText.id, `${firstText.content}${firstText.content ? ' ' : ''}${link}`);
+      }
+      return;
+    }
+
+    const block = activePage.blocks.find((b) => b.id === targetBlockId);
+    const content = block?.content || '';
+    // Insert en la pos del cursor si podemos leerla, si no al final.
+    let insertAt = content.length;
+    if (targetNode && typeof targetNode.selectionStart === 'number' && targetNode.selectionStart != null) {
+      insertAt = targetNode.selectionStart;
+    }
+    const before = content.slice(0, insertAt);
+    const after = content.slice(insertAt);
+    const sep = before && !/\s$/.test(before) ? ' ' : '';
+    updateBlock(activePage.id, targetBlockId, `${before}${sep}${link}${after}`);
+  };
 
   // "Hub" pages — highlighted in the sidebar when referenced by 3+ other pages.
   // No AI, no new infra: just a single pass over the backlinks that already exist.
@@ -665,6 +617,18 @@ function Glenwyn({ user }) {
   // Postgres before `databases.page_id` can reference it as a foreign key, so
   // this saves it directly and awaits that — going through the normal debounced
   // autosave here would very likely race and fail with a foreign-key violation.
+  // Gated wrapper around database creation (FASE 3 — freemium soft limit). If the
+// user is on Free and already at the cap, we don't create anything: instead we
+// open the upgrade modal with the value prop. Admins and paid plans always pass.
+const requestCreateDatabase = (parentId = null, viewMode = 'table') => {
+    if (!canCreateDatabase(profile, databases.length)) {
+      setUpgradeFeature(`una base de datos extra (ya tenés ${databases.length})`);
+      setUpgradeOpen(true);
+      return;
+    }
+    createDatabasePage(parentId, viewMode);
+  };
+
   const createDatabasePage = async (parentId = null, initialViewMode = 'table') => {
     const siblings = pages.filter((p) => p.parentId === parentId);
     const newPage = emptyPage('Base de datos sin título', parentId, siblings.length);
@@ -807,6 +771,17 @@ function Glenwyn({ user }) {
   };
 
   const addDatabaseRecord = (databaseId, parentPageId, initialProperties = {}) => {
+    // FASE 3 — freemium: Free tiene un tope de registros por base de datos.
+    // Todas las vistas (tabla, tablero, calendario, galería) mutan registros a
+    // través de este único punto, así que el gate vive acá y cubre todas.
+    const dbRows = pages.filter((p) => p.databaseId === databaseId).length;
+    if (!canAddDatabaseRow(profile, dbRows)) {
+      setUpgradeFeature(
+        `crear más de ${MAX_DB_ROWS} registros en una base de datos (el plan Free tiene un tope de ${MAX_DB_ROWS} por base de datos)`
+      );
+      setUpgradeOpen(true);
+      return;
+    }
     const db = databases.find((d) => d.id === databaseId);
     const siblings = pages.filter((p) => p.databaseId === databaseId);
     const record = {
@@ -1401,6 +1376,11 @@ function Glenwyn({ user }) {
   // Uploads a file to Supabase Storage and, on success, sets it as the image block's URL.
   // Left to throw on failure — the ImageBlock component catches it to show an inline error.
   const uploadImageFile = async (pageId, blockId, file) => {
+    if (!canUploadFile(profile, file ? file.size : 0)) {
+      setUpgradeFeature(`adjuntar archivos de más de 5 MB en el plan Free`);
+      setUpgradeOpen(true);
+      return;
+    }
     const url = await uploadImage(file, user.id);
     updateImageUrl(pageId, blockId, url);
   };
@@ -1569,10 +1549,11 @@ function Glenwyn({ user }) {
   const paletteCommands = [
     { id: 'new-page', Icon: FilePlus, label: 'Nueva página', keywords: 'crear pagina nota', shortcut: '⌘⇧N' },
     { id: 'new-database', Icon: Database, label: 'Nueva base de datos', keywords: 'crear tabla', shortcut: '⌘⇧B' },
-    { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox', shortcut: '⌘⇧I' },
+    { id: 'inbox', Icon: Inbox, label: 'Ir a la Bandeja de entrada', keywords: 'captura rapida inbox', shortcut: '⌘⇧G' },
+    { id: 'inspector', Icon: PanelRight, label: showInspector ? 'Ocultar Inspector' : 'Abrir Inspector', keywords: 'panel lateral detalle backlinks grafo', shortcut: '⌘⇧I' },
     { id: 'tasks', Icon: ListChecks, label: 'Ver Mis tareas', keywords: 'pendientes vencidas', shortcut: '⌘⇧T' },
     { id: 'orphans', Icon: Unlink, label: 'Ver Notas huérfanas', keywords: 'sin conectar', shortcut: '⌘⇧H' },
-    { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion', shortcut: '⌘.' },
+    { id: 'zen', Icon: Focus, label: zenMode ? 'Salir del Modo Zen' : 'Activar Modo Zen', keywords: 'enfoque concentracion', shortcut: '⌘⇧Z' },
     { id: 'deep-work', Icon: Timer, label: deepWorkActive ? 'Terminar Deep Work' : 'Iniciar Deep Work (25 min)', keywords: 'temporizador pomodoro enfoque', shortcut: '⌘⇧D' },
     { id: 'dark-mode', Icon: dark ? Sun : Moon, label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', keywords: 'tema apariencia', shortcut: '⌘⇧L' },
     { id: 'trash', Icon: Trash2, label: 'Ver Papelera', keywords: 'eliminadas borradas', shortcut: '⌘⇧P' },
@@ -1590,8 +1571,9 @@ function Glenwyn({ user }) {
     setSearchOpen(false);
     setSearchQuery('');
     if (id === 'new-page') createPage(null);
-    else if (id === 'new-database') createDatabasePage(null);
+    else if (id === 'new-database') requestCreateDatabase(null);
     else if (id === 'inbox') quickCaptureToInbox();
+    else if (id === 'inspector') setShowInspector((s) => !s);
     else if (id === 'tasks') {
       setTasksViewOpen(true);
       setOrphansViewOpen(false);
@@ -1621,6 +1603,30 @@ function Glenwyn({ user }) {
   const runPaletteCommandRef = useRef(runPaletteCommand);
   useEffect(() => {
     runPaletteCommandRef.current = runPaletteCommand;
+  });
+
+  // Atajos de teclado globales — extraídos a src/hooks/useKeyboardShortcuts.js.
+  // Se llama acá (no arriba) porque depende de quickCaptureToInbox y de
+  // runPaletteCommandRef, que recién existen en este punto del componente.
+  useKeyboardShortcuts({
+    setSidebarOpen,
+    setSearchOpen,
+    setZenMode,
+    setDeepWorkActive,
+    setShortcutsOpen,
+    setTrashOpen,
+    setTemplateMenuOpen,
+    setHistoryOpen,
+    setShareOpen,
+    setTasksViewOpen,
+    setTopbarMenuOpen,
+    setOrphansViewOpen,
+    setSettingsOpen,
+    setDeepWorkMenuOpen,
+    setShowInspector,
+    quickCaptureToInbox,
+    runPaletteCommandRef,
+    activeIdRef,
   });
 
 
@@ -1673,6 +1679,10 @@ function Glenwyn({ user }) {
         .glenwyn-page-row:hover .glenwyn-page-actions { opacity: 1; }
         .glenwyn-divider-row:hover .glenwyn-divider-delete { opacity: 1; }
         .glenwyn-media-row:hover .glenwyn-media-delete { opacity: 1; }
+        /* Left-hand block hover controls (+ and ⋮⋮) — revealed the same way as
+           the page actions, on hovering the block row rather than each button. */
+        .glenwyn-block-controls { opacity: 0; transition: opacity 120ms ease; }
+        .glenwyn-block-row:hover .glenwyn-block-controls { opacity: 1; }
         textarea.glenwyn-block { resize: none; }
         /* :focus-visible (used elsewhere in the app) mostly only fires on keyboard
            navigation — for the actual writing area, people click in with the mouse far
@@ -1700,7 +1710,8 @@ function Glenwyn({ user }) {
         @media (hover: none) {
           .glenwyn-page-actions,
           .glenwyn-divider-delete,
-          .glenwyn-media-delete {
+          .glenwyn-media-delete,
+          .glenwyn-block-controls {
             opacity: 1 !important;
           }
         }
@@ -1846,6 +1857,115 @@ function Glenwyn({ user }) {
           </button>
         </div>
 
+        {/* Encabezado / Workspace — bloque 1: usuarios + búsqueda rápida (⌘K) + inbox */}
+        {sidebarOpen && (
+          <div style={{ padding: '2px 8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {profile && (
+              <div
+                title={profile.isAdmin ? 'Tenés acceso completo, sin límites de plan' : `Tu plan actual: ${profile.plan}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: t.fern,
+                  borderBottom: `1px solid ${t.clay}`,
+                  paddingBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: profile.isAdmin ? t.moss : t.clay,
+                    color: profile.isAdmin ? t.canvas : t.fern,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontFamily: monoFont,
+                    fontSize: 11,
+                    flexShrink: 0,
+                  }}
+                >
+                  {(user.email || user.phone || 'G').charAt(0).toUpperCase()}
+                </span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {user.email || user.phone || 'Tu cuenta'}
+                </span>
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    fontFamily: monoFont,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.03em',
+                    background: t.clay,
+                    borderRadius: 8,
+                    padding: '1px 6px',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: profile.isAdmin ? t.moss : profile.plan === 'free' ? t.fern : t.sun }} />
+                  {profile.isAdmin ? 'Admin' : `Plan ${profile.plan}`}
+                </span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                className="glenwyn-focus"
+                onClick={() => setSearchOpen(true)}
+                title="Buscar página o comando (⌘K)"
+                aria-label="Buscar página o comando (⌘K)"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 8px',
+                  background: 'none',
+                  border: `1px solid ${t.clay}`,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  color: t.fern,
+                  fontSize: 12.5,
+                  textAlign: 'left',
+                }}
+              >
+                <Search size={13} strokeWidth={1.75} />
+                <span style={{ flex: 1 }}>Buscar…</span>
+                <span style={{ fontSize: 10, fontFamily: monoFont, opacity: 0.7 }}>⌘K</span>
+              </button>
+              {inboxPageId && (
+                <button
+                  className="glenwyn-focus"
+                  onClick={() => selectPage(inboxPageId)}
+                  title="Bandeja de entrada — notas fugaces"
+                  aria-label="Bandeja de entrada"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 30,
+                    background: activeId === inboxPageId ? t.clay : 'none',
+                    border: `1px solid ${t.clay}`,
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    color: activeId === inboxPageId ? t.bark : t.fern,
+                    padding: '6px 0',
+                  }}
+                >
+                  <Inbox size={14} strokeWidth={1.75} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div
           className="glenwyn-scroll"
           style={{ flex: 1, overflowY: 'auto', padding: sidebarOpen ? '4px 8px' : '4px 4px' }}
@@ -1855,140 +1975,206 @@ function Glenwyn({ user }) {
             if (sidebarOpen) handleDropToRoot();
           }}
         >
+          {/* Bloque 2 — "Second Brain": Grafo Local, Tareas y Notas Huérfanas en
+              un acordeón colapsable para no saturar la altura del sidebar. */}
           {!searchQuery && (
-            <div
-              role="button"
-              tabIndex={0}
-              className="glenwyn-focus"
-              onClick={() => {
-                setTasksViewOpen(true);
-                setOrphansViewOpen(false);
-                if (isNarrow) setSidebarOpen(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setTasksViewOpen(true);
-                  setOrphansViewOpen(false);
-                  if (isNarrow) setSidebarOpen(false);
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: sidebarOpen ? 'space-between' : 'center',
-                gap: 8,
-                padding: '7px 8px',
-                borderRadius: 7,
-                cursor: 'pointer',
-                background: tasksViewOpen ? t.clay : 'transparent',
-                fontSize: 13.5,
-                color: tasksViewOpen ? t.bark : t.fern,
-                marginBottom: 6,
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ListChecks size={15} strokeWidth={1.75} />
-                {sidebarOpen && <span>Mis tareas</span>}
-              </span>
-              {sidebarOpen && allTasks.filter((tsk) => !tsk.checked && tsk.dueDate <= today).length > 0 && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: monoFont,
-                    color: t.fern,
-                    background: t.clay,
-                    borderRadius: 10,
-                    padding: '1px 6px',
-                  }}
-                >
-                  {allTasks.filter((tsk) => !tsk.checked && tsk.dueDate <= today).length}
+            <div style={{ marginBottom: 8 }}>
+              <button
+                className="glenwyn-focus"
+                onClick={() => setSecondBrainOpen((o) => !o)}
+                aria-expanded={secondBrainOpen}
+                title="Second Brain"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: sidebarOpen ? 'space-between' : 'center',
+                  gap: 8,
+                  padding: '7px 8px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  fontSize: 11,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontFamily: monoFont,
+                  color: t.fern,
+                  marginBottom: 4,
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ChevronRight
+                    size={12}
+                    strokeWidth={2}
+                    style={{
+                      transition: `transform ${motion.fast}`,
+                      transform: secondBrainOpen ? 'rotate(90deg)' : 'none',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {sidebarOpen && <span>Second Brain</span>}
                 </span>
+              </button>
+              {secondBrainOpen && (
+                <>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="glenwyn-focus"
+                    title="Grafo local de la página activa — backlinks, enlaces y notas relacionadas"
+                    onClick={() => {
+                      setShowInspector(true);
+                      if (isNarrow) setSidebarOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setShowInspector(true);
+                        if (isNarrow) setSidebarOpen(false);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: sidebarOpen ? 'space-between' : 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: showInspector ? t.clay : 'transparent',
+                      fontSize: 13.5,
+                      color: showInspector ? t.bark : t.fern,
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Network size={15} strokeWidth={1.75} />
+                      {sidebarOpen && <span>Grafo Local</span>}
+                    </span>
+                  </div>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="glenwyn-focus"
+                    onClick={() => {
+                      setTasksViewOpen(true);
+                      setOrphansViewOpen(false);
+                      if (isNarrow) setSidebarOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setTasksViewOpen(true);
+                        setOrphansViewOpen(false);
+                        if (isNarrow) setSidebarOpen(false);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: sidebarOpen ? 'space-between' : 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: tasksViewOpen ? t.clay : 'transparent',
+                      fontSize: 13.5,
+                      color: tasksViewOpen ? t.bark : t.fern,
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ListChecks size={15} strokeWidth={1.75} />
+                      {sidebarOpen && <span>Tareas</span>}
+                    </span>
+                    {sidebarOpen && allTasks.filter((tsk) => !tsk.checked && tsk.dueDate <= today).length > 0 && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontFamily: monoFont,
+                          color: t.fern,
+                          background: t.clay,
+                          borderRadius: 10,
+                          padding: '1px 6px',
+                        }}
+                      >
+                        {allTasks.filter((tsk) => !tsk.checked && tsk.dueDate <= today).length}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="glenwyn-focus"
+                    title="Páginas que nadie enlaza ni menciona todavía"
+                    onClick={() => {
+                      setOrphansViewOpen(true);
+                      setTasksViewOpen(false);
+                      if (isNarrow) setSidebarOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setOrphansViewOpen(true);
+                        setTasksViewOpen(false);
+                        if (isNarrow) setSidebarOpen(false);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: sidebarOpen ? 'space-between' : 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: orphansViewOpen ? t.clay : 'transparent',
+                      fontSize: 13.5,
+                      color: orphansViewOpen ? t.bark : t.fern,
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Unlink size={15} strokeWidth={1.75} />
+                      {sidebarOpen && <span>Notas huérfanas</span>}
+                    </span>
+                    {sidebarOpen && orphanPages.length > 0 && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontFamily: monoFont,
+                          color: t.fern,
+                          background: t.clay,
+                          borderRadius: 10,
+                          padding: '1px 6px',
+                        }}
+                      >
+                        {orphanPages.length}
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
-          {!searchQuery && inboxPageId && (
+          {/* Bloque 3 — "Espacio de Trabajo": árbol de navegación (recorrido
+              reciente, favoritos y páginas anidadas / bases de datos). */}
+          {!searchQuery && sidebarOpen && (
             <div
-              role="button"
-              tabIndex={0}
-              className="glenwyn-focus"
-              title="Notas fugaces — anotá rápido, organizá después"
-              onClick={() => selectPage(inboxPageId)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  selectPage(inboxPageId);
-                }
-              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                gap: 8,
-                padding: '7px 8px',
-                borderRadius: 7,
-                cursor: 'pointer',
-                background: activeId === inboxPageId ? t.clay : 'transparent',
-                fontSize: 13.5,
-                color: activeId === inboxPageId ? t.bark : t.fern,
-                marginBottom: 6,
+                gap: 6,
+                padding: '4px 8px 2px',
+                fontSize: 11,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                fontFamily: monoFont,
+                color: t.fern,
+                opacity: 0.75,
               }}
             >
-              <Inbox size={15} strokeWidth={1.75} />
-              {sidebarOpen && <span>Bandeja de entrada</span>}
-            </div>
-          )}
-          {!searchQuery && (
-            <div
-              role="button"
-              tabIndex={0}
-              className="glenwyn-focus"
-              title="Páginas que nadie enlaza ni menciona todavía"
-              onClick={() => {
-                setOrphansViewOpen(true);
-                setTasksViewOpen(false);
-                if (isNarrow) setSidebarOpen(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setOrphansViewOpen(true);
-                  setTasksViewOpen(false);
-                  if (isNarrow) setSidebarOpen(false);
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: sidebarOpen ? 'space-between' : 'center',
-                gap: 8,
-                padding: '7px 8px',
-                borderRadius: 7,
-                cursor: 'pointer',
-                background: orphansViewOpen ? t.clay : 'transparent',
-                fontSize: 13.5,
-                color: orphansViewOpen ? t.bark : t.fern,
-                marginBottom: 6,
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Unlink size={15} strokeWidth={1.75} />
-                {sidebarOpen && <span>Notas huérfanas</span>}
-              </span>
-              {sidebarOpen && orphanPages.length > 0 && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: monoFont,
-                    color: t.fern,
-                    background: t.clay,
-                    borderRadius: 10,
-                    padding: '1px 6px',
-                  }}
-                >
-                  {orphanPages.length}
-                </span>
-              )}
+              <span style={{ flex: 1 }}>Espacio de Trabajo</span>
             </div>
           )}
           {!searchQuery && sidebarOpen && trailPages.length > 0 && (
@@ -2286,7 +2472,7 @@ function Glenwyn({ user }) {
                 <div
                   key={opt.mode}
                   onClick={() => {
-                    createDatabasePage(null, opt.mode);
+                    requestCreateDatabase(null, opt.mode);
                     setTemplateMenuOpen(false);
                   }}
                   style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '8px 10px', cursor: 'pointer' }}
@@ -2344,50 +2530,57 @@ function Glenwyn({ user }) {
               </button>
             )}
           </div>
+          {/* Bloque 4 — Footer horizontal compacto: Papelera, Atajos, Ajustes y
+              modo de tema en una única fila, con íconos discretos + tooltips, para
+              ahorrar altura vertical. El plan/profile ya vive arriba (bloque 1). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 4 }}>
           <button
             className="glenwyn-focus"
             onClick={() => setDark((d) => !d)}
+            title={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
             style={{
-              width: '100%',
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center',
-              gap: 8,
-              padding: '7px 8px',
+              justifyContent: 'center',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               color: t.fern,
-              fontSize: 13.5,
-              borderRadius: 7,
+              padding: '7px 4px',
+              borderRadius: 6,
+              transition: `background-color ${motion.fast}`,
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
             {dark ? <Moon size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
-            {sidebarOpen && <span>{dark ? 'Modo claro' : 'Modo oscuro'}</span>}
           </button>
           <button
             className="glenwyn-focus"
-            onClick={() => setSettingsOpen(true)}
-            title="Ajustes"
+            onClick={() => setShortcutsOpen(true)}
+            title="Atajos de teclado (?)"
+            aria-label="Atajos de teclado (?)"
             style={{
-              width: '100%',
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center',
-              gap: 8,
-              padding: '7px 8px',
+              justifyContent: 'center',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               color: t.fern,
-              fontSize: 13.5,
-              borderRadius: 7,
+              padding: '7px 4px',
+              borderRadius: 8,
+              transition: `background-color ${motion.fast}`,
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <SettingsIcon size={15} strokeWidth={1.75} />
-            {sidebarOpen && <span>Ajustes</span>}
+            <Keyboard size={15} strokeWidth={1.75} />
           </button>
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
             <button
               className="glenwyn-focus"
               onClick={(e) => {
@@ -2395,23 +2588,24 @@ function Glenwyn({ user }) {
                 setDeepWorkMenuOpen((o) => !o);
               }}
               title="Modo Deep Work — sesión de enfoque con temporizador"
+              aria-label="Modo Deep Work"
               style={{
-                width: '100%',
+                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                gap: 8,
-                padding: '7px 8px',
+                justifyContent: 'center',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
                 color: t.fern,
-                fontSize: 13.5,
-                borderRadius: 7,
+                padding: '7px 4px',
+                borderRadius: 8,
+                transition: `background-color ${motion.fast}`,
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <Timer size={15} strokeWidth={1.75} />
-              {sidebarOpen && <span>Deep Work</span>}
             </button>
             {deepWorkMenuOpen && (
               <div
@@ -2419,7 +2613,7 @@ function Glenwyn({ user }) {
                 style={{
                   position: 'absolute',
                   bottom: '100%',
-                  left: 8,
+                  left: -40,
                   marginBottom: 6,
                   width: 170,
                   background: t.canvas,
@@ -2450,59 +2644,69 @@ function Glenwyn({ user }) {
           <button
             className="glenwyn-focus"
             onClick={() => setTrashOpen(true)}
+            title={archivedPages.length > 0 ? `Papelera (${archivedPages.length})` : 'Papelera'}
+            aria-label={`Papelera${archivedPages.length > 0 ? ` (${archivedPages.length})` : ''}`}
             style={{
-              width: '100%',
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: sidebarOpen ? 'space-between' : 'center',
-              gap: 8,
-              padding: '7px 8px',
+              justifyContent: 'center',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               color: t.fern,
-              fontSize: 13.5,
-              borderRadius: 7,
+              padding: '7px 4px',
+              borderRadius: 8,
+              transition: `background-color ${motion.fast}`,
+              position: 'relative',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Trash2 size={15} strokeWidth={1.75} />
-              {sidebarOpen && <span>Papelera</span>}
-            </span>
-            {sidebarOpen && archivedPages.length > 0 && (
+            <Trash2 size={15} strokeWidth={1.75} />
+            {archivedPages.length > 0 && (
               <span
                 style={{
-                  fontSize: 11,
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  fontSize: 9,
                   fontFamily: monoFont,
                   color: t.fern,
-                  background: t.clay,
-                  borderRadius: 10,
-                  padding: '1px 6px',
+                  background: t.canvasAlt,
+                  borderRadius: 8,
+                  padding: '0 3px',
+                  border: `1px solid ${t.clay}`,
                 }}
               >
                 {archivedPages.length}
               </span>
             )}
           </button>
-          {profile && sidebarOpen && (
-            <div
-              title={profile.isAdmin ? 'Tenés acceso completo, sin límites de plan' : 'Tu plan actual'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '5px 8px',
-                fontSize: 11,
-                fontFamily: monoFont,
-                color: t.fern,
-                textTransform: 'uppercase',
-                letterSpacing: '0.03em',
-              }}
-            >
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: profile.isAdmin ? t.moss : profile.plan === 'free' ? t.fern : t.sun }} />
-              {profile.isAdmin ? 'Administrador' : `Plan ${profile.plan}`}
-            </div>
-          )}
+          <button
+            className="glenwyn-focus"
+            onClick={() => setSettingsOpen(true)}
+            title="Ajustes (⌘,)"
+            aria-label="Ajustes (⌘,)"
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: t.fern,
+              padding: '7px 4px',
+              borderRadius: 8,
+              transition: `background-color ${motion.fast}`,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <SettingsIcon size={15} strokeWidth={1.75} />
+          </button>
+          </div>
         </div>
       </div>
       <div
@@ -2524,7 +2728,6 @@ function Glenwyn({ user }) {
             left: 0,
             right: 0,
             height: 45,
-            display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '14px 28px',
@@ -2532,9 +2735,10 @@ function Glenwyn({ user }) {
             color: t.fern,
             fontFamily: monoFont,
             zIndex: 2,
-            opacity: hideChrome ? 0.12 : 1,
-            pointerEvents: hideChrome ? 'none' : 'auto',
-            transition: 'opacity 200ms ease',
+            display: hideChrome ? 'none' : 'flex',
+            opacity: 1,
+            pointerEvents: 'auto',
+            transition: `opacity 200ms ease, display 200ms ease`,
             boxSizing: 'border-box',
           }}
         >
@@ -2589,6 +2793,35 @@ function Glenwyn({ user }) {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'nowrap', position: 'relative' }}>
+            {/* Abrir/cerrar el Inspector lateral. Solo relevante cuando hay una
+                página activa — TasksView y OrphanPagesView ya tienen su propia UI. */}
+            {!tasksViewOpen && !orphansViewOpen && activePage && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowInspector((s) => !s);
+                }}
+                title={showInspector ? 'Cerrar Inspector' : 'Abrir Inspector (⌘⇧I)'}
+                aria-label={showInspector ? 'Cerrar Inspector' : 'Abrir Inspector'}
+                aria-pressed={showInspector}
+                className="glenwyn-focus"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: showInspector ? t.moss : t.fern,
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  transition: 'color 120ms ease',
+                }}
+              >
+                <PanelRight size={16} strokeWidth={1.75} />
+              </button>
+            )}
             {/* Compartir/exportar/historial/palabras viven en un solo menú "⋯", en
                 cualquier tamaño de pantalla — mostrarlos todos sueltos en desktop era
                 justo lo que hacía sentir la barra superior recargada. */}
@@ -2818,7 +3051,7 @@ function Glenwyn({ user }) {
             overflowY: 'auto',
             display: 'flex',
             justifyContent: 'center',
-            padding: '64px 32px 120px',
+            padding: hideChrome ? '40px 32px 80px' : '64px 32px 120px',
           }}
         >
           <div
@@ -2914,6 +3147,8 @@ function Glenwyn({ user }) {
                     fontFamily: displayFont,
                     fontWeight: 600,
                     fontSize: 34,
+                    letterSpacing: '-0.015em',
+                    lineHeight: 1.15,
                     color: t.bark,
                     marginBottom: 28,
                     outline: 'none',
@@ -2952,68 +3187,92 @@ function Glenwyn({ user }) {
                     registerRef={registerBlockRef(b.id)}
                   />
                 ))}
-                {(backlinks.length > 0 || outgoingLinks.length > 0) && (
-                  <MiniGraphMap
-                    t={t}
-                    centerPage={activePage}
-                    incoming={backlinks}
-                    outgoing={outgoingLinks}
-                    onNavigate={selectPage}
-                  />
-                )}
-                {backlinks.length > 0 && (
-                  <div style={{ marginTop: 48, paddingTop: 20, borderTop: `1px solid ${t.clay}` }}>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: '0.04em',
-                        textTransform: 'uppercase',
-                        color: t.fern,
-                        fontFamily: monoFont,
-                        marginBottom: 10,
-                      }}
-                    >
-                      {backlinks.length === 1 ? '1 página te menciona' : `${backlinks.length} páginas te mencionan`}
-                    </div>
-                    {backlinks.map((p) => (
-                      <div
-                        key={p.id}
-                        role="button"
-                        tabIndex={0}
-                        className="glenwyn-focus"
-                        onClick={() => selectPage(p.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            selectPage(p.id);
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '8px 10px',
-                          borderRadius: 7,
-                          cursor: 'pointer',
-                          fontSize: 13.5,
-                          color: t.bark,
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <span>{p.icon || '📄'}</span>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {p.title || 'Sin título'}
-                        </span>
+                {!showInspector && (
+                  <>
+                    {(backlinks.length > 0 || outgoingLinks.length > 0) && (
+                      <MiniGraphMap
+                        t={t}
+                        centerPage={activePage}
+                        incoming={backlinks}
+                        outgoing={outgoingLinks}
+                        onNavigate={selectPage}
+                      />
+                    )}
+                    {backlinks.length > 0 && (
+                      <div style={{ marginTop: 48, paddingTop: 20, borderTop: `1px solid ${t.clay}` }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                            color: t.fern,
+                            fontFamily: monoFont,
+                            marginBottom: 10,
+                          }}
+                        >
+                          {backlinks.length === 1 ? '1 página te menciona' : `${backlinks.length} páginas te mencionan`}
+                        </div>
+                        {backlinks.map((p) => (
+                          <div
+                            key={p.id}
+                            role="button"
+                            tabIndex={0}
+                            className="glenwyn-focus"
+                            onClick={() => selectPage(p.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                selectPage(p.id);
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '8px 10px',
+                              borderRadius: 7,
+                              cursor: 'pointer',
+                              fontSize: 13.5,
+                              color: t.bark,
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <span>{p.icon || '📄'}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {p.title || 'Sin título'}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+                    <RelatedNotesSuggestions
+                      t={t}
+                      suggestions={relatedSuggestions}
+                      onInsertLink={insertRelatedLink}
+                      onNavigate={selectPage}
+                    />
+                  </>
                 )}
               </>
             )}
           </div>
         </div>
       </div>
+
+      <InspectorDrawer
+        t={t}
+        showInspector={showInspector}
+        isNarrow={isNarrow}
+        onClose={() => setShowInspector(false)}
+        activePage={activePage}
+        backlinks={backlinks}
+        outgoingLinks={outgoingLinks}
+        relatedSuggestions={relatedSuggestions}
+        onNavigate={selectPage}
+        onInsertLink={insertRelatedLink}
+        backlinkCount={backlinks.length}
+      />
 
       {/* ---- Quick search ---- */}
       {searchOpen && (
@@ -3837,6 +4096,83 @@ function Glenwyn({ user }) {
                 No pudimos eliminar la cuenta. Probá de nuevo, o escribinos si sigue fallando.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Upgrade (plan Free, límite freemium alcanzado) ---- */}
+      {upgradeOpen && (
+        <div
+          onClick={() => setUpgradeOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(20,20,15,0.35)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: '12vh',
+            zIndex: 11,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glenwyn-popper"
+            ref={settingsModalRef}
+            style={{
+              background: t.canvas,
+              border: `1px solid ${t.clay}`,
+              borderRadius: 14,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+              width: 420,
+              maxWidth: 'calc(100vw - 32px)',
+              maxHeight: '75vh',
+              overflowY: 'auto',
+              padding: 20,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🔒</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: t.bark }}>Plan Free</span>
+              </div>
+              <button
+                onClick={() => setUpgradeOpen(false)}
+                className="glenwyn-focus"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, fontSize: 16 }}
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: t.bark, lineHeight: 1.6, marginBottom: 14 }}>
+              {upgradeFeature
+                ? `Para ${upgradeFeature}, necesitás el plan Plus.`
+                : 'Esta acción está limitada en el plan Free.'}
+            </div>
+            <div style={{ fontSize: 12, color: t.fern, lineHeight: 1.6, marginBottom: 18 }}>
+              Con Plus y Business tenés bases de datos ilimitadas y archivos sin límite de tamaño, entre otros beneficios.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setUpgradeOpen(false)}
+                className="glenwyn-focus"
+                style={{ background: 'none', border: `1px solid ${t.clay}`, borderRadius: 7, padding: '7px 12px', fontSize: 12.5, color: t.fern, cursor: 'pointer' }}
+              >
+                Ahora no
+              </button>
+              <button
+                onClick={() => {
+                  setUpgradeOpen(false);
+                  setSettingsOpen(true);
+                  setPlansExpanded(true);
+                }}
+                className="glenwyn-focus"
+                style={{ background: t.moss, border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 12.5, color: t.canvas, cursor: 'pointer' }}
+              >
+                Ver planes
+              </button>
+            </div>
           </div>
         </div>
       )}

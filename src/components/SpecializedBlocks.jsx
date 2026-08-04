@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { bodyFont } from '../theme';
+import { bodyFont, elevation } from '../theme';
 import { isHttpUrl, parseEmbedUrl } from '../lib/pageUtils';
 import { X, Image as ImageIcon, ExternalLink, FileText } from 'lucide-react';
 
@@ -557,9 +557,10 @@ export function SlashMenu({ t, commands, index, onPick }) {
         background: t.canvas,
         border: `1px solid ${t.clay}`,
         borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        boxShadow: elevation.menu,
         zIndex: 5,
         overflow: 'hidden',
+        animation: 'glenwyn-popper 160ms ease-out',
       }}
     >
       {commands.length === 0 ? (

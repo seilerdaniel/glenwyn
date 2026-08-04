@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { displayFont, bodyFont, monoFont } from '../theme';
-import { Flag, Calendar as CalendarIcon, Lightbulb } from 'lucide-react';
+import { displayFont, bodyFont, monoFont, elevation } from '../theme';
+import { Flag, Calendar as CalendarIcon, Lightbulb, FilePlus, Plus, GripVertical } from 'lucide-react';
 import {
   SLASH_COMMANDS,
   detectMarkdownShortcut,
@@ -9,6 +9,89 @@ import {
   parseNaturalDateFromText,
 } from '../lib/pageUtils';
 import { ImageBlock, TableBlock, EmbedBlock, PageLinkBlock, SlashMenu } from './SpecializedBlocks';
+
+// Measures where the caret would sit inside a <textarea> by mirroring its text
+// up to that index in a hidden div with identical metrics. Lets the floating
+// "convert selection" bar anchor right above the selected text, like Notion.
+function measureCaret(el, caretIndex) {
+  const text = el.value.slice(0, caretIndex);
+  const cs = window.getComputedStyle(el);
+  const contentWidth = el.clientWidth;
+  const mirror = document.createElement('div');
+  const props = [
+    'font', 'fontStyle', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing',
+    'fontFamily', 'whiteSpace', 'wordWrap', 'overflowWrap', 'paddingTop',
+    'paddingLeft', 'paddingRight', 'margin', 'border', 'textAlign',
+  ];
+  props.forEach((p) => {
+    if (cs[p]) mirror.style[p] = cs[p];
+  });
+  mirror.style.position = 'fixed';
+  mirror.style.visibility = 'hidden';
+  mirror.style.left = '-9999px';
+  mirror.style.top = '-9999px';
+  mirror.style.width = `${contentWidth}px`;
+  mirror.style.boxSizing = 'border-box';
+  mirror.style.height = 'auto';
+  mirror.textContent = text;
+  const marker = document.createElement('ins');
+  marker.style.cssText = 'position:relative;visibility:hidden;width:0;height:0;display:inline-block;';
+  marker.textContent = '.';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const markerRect = marker.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  document.body.removeChild(mirror);
+  return { x: markerRect.left - elRect.left, y: markerRect.top - elRect.top };
+}
+
+// Left-hand hover controls for a block: a "+" that opens the block's slash menu
+// and a drag handle (⋮⋮) prepared for future drag-to-reorder. Revealed on hover
+// via .glenwyn-block-row:hover (see the inline <style> in App.jsx), same
+// pattern as the sidebar's page actions and the media delete buttons.
+function BlockHoverControls({ t, onAdd, onFocusBlock, locked }) {
+  if (locked) return null;
+  return (
+    <div
+      className="glenwyn-block-controls"
+      style={{
+        position: 'absolute',
+        left: -38,
+        top: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 1,
+        padding: '4px 0',
+      }}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onAdd();
+        }}
+        title="Agregar un bloque"
+        aria-label="Agregar un bloque"
+        className="glenwyn-focus"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, display: 'flex', padding: 2, borderRadius: 4 }}
+      >
+        <Plus size={15} strokeWidth={2} />
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onFocusBlock();
+        }}
+        title="Arrastrar para mover el bloque"
+        aria-label="Mover el bloque"
+        className="glenwyn-focus"
+        style={{ background: 'none', border: 'none', cursor: 'grab', color: t.fern, display: 'flex', padding: 2, borderRadius: 4 }}
+      >
+        <GripVertical size={14} strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
 
 function Block({
   block,
@@ -75,6 +158,7 @@ function Block({
   const [isTextFocused, setIsTextFocused] = useState(false);
   const [mentionTrigger, setMentionTrigger] = useState(null); // { startIndex, query } | null
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [selectionBar, setSelectionBar] = useState(null); // { start, end, x, y } | null
 
   // Combines the local auto-resize ref with the parent's registry (used to move focus
   // to this block from a sibling after a delete).
@@ -128,6 +212,19 @@ function Block({
       onConvert(cmd.type, '');
     }
     if (cmd.type === 'divider') onEnter();
+  };
+
+  // Opens the slash menu from the left-hand "+" hover control, and focuses the
+  // block itself so the very next keystroke keeps typing in it. Same menu the
+  // user gets by typing "/", just triggered by pointer instead.
+  const openSlashMenu = () => {
+    setSlashOpen(true);
+    setSlashIndex(0);
+    if (ref.current) ref.current.focus();
+  };
+
+  const focusBlock = () => {
+    if (ref.current) ref.current.focus();
   };
 
   const handleChange = (value, cursorPos = value.length) => {
@@ -268,6 +365,35 @@ function Block({
     }
   };
 
+  // Updates the floating "convert selection" bar whenever the textarea's active
+  // selection changes (drag select, double-click, arrow keys). Reads the DOM
+  // textarea's selectionStart/selectionEnd because the controlled value alone
+  // can't tell us where the selection sits.
+  const refreshSelectionBar = (input) => {
+    if (!input || locked || block.type !== 'text') {
+      setSelectionBar(null);
+      return;
+    }
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (start == null || end == null || start === end || !block.content.slice(start, end).trim()) {
+      setSelectionBar(null);
+      return;
+    }
+    const pos = measureCaret(input, end);
+    setSelectionBar({ start, end, x: pos.x, y: pos.y });
+  };
+
+  const convertSelection = () => {
+    if (!selectionBar) return;
+    onExtractSelection(
+      block.content.slice(selectionBar.start, selectionBar.end),
+      selectionBar.start,
+      selectionBar.end
+    );
+    setSelectionBar(null);
+  };
+
   const sharedTextareaStyle = {
     width: '100%',
     border: 'none',
@@ -275,7 +401,8 @@ function Block({
     background: 'transparent',
     fontFamily: bodyFont,
     fontSize: 15.5,
-    lineHeight: 1.7,
+    lineHeight: 1.75,
+    letterSpacing: '0.005em',
     color: t.bark,
     marginBottom: 4,
   };
@@ -283,9 +410,10 @@ function Block({
   if (block.type === 'divider') {
     return (
       <div
-        className="glenwyn-divider-row"
+        className="glenwyn-divider-row glenwyn-block-row"
         style={{ position: 'relative', display: 'flex', alignItems: 'center', margin: '14px 0' }}
       >
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <div style={{ flex: 1, height: 1, background: t.clay }} />
         <button
           className="glenwyn-divider-delete"
@@ -318,7 +446,8 @@ function Block({
     const priorityLabel = { 1: 'Prioridad alta', 2: 'Prioridad media', 3: 'Prioridad baja' }[block.priority] || 'Sin prioridad — click para agregar';
 
     return (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6, position: 'relative' }}>
+      <div className="glenwyn-block-row" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6, position: 'relative' }}>
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <input
           type="checkbox"
           checked={!!block.checked}
@@ -430,7 +559,8 @@ function Block({
 
   if (block.type === 'heading') {
     return (
-      <div style={{ position: 'relative' }}>
+      <div className="glenwyn-block-row" style={{ position: 'relative' }}>
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
@@ -449,7 +579,7 @@ function Block({
             fontWeight: 500,
             fontSize: 22,
             color: t.bark,
-            marginTop: 18,
+            marginTop: 24,
             marginBottom: 6,
           }}
         />
@@ -460,7 +590,8 @@ function Block({
 
   if (block.type === 'bullet' || block.type === 'numbered') {
     return (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 2, position: 'relative' }}>
+      <div className="glenwyn-block-row" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 2, position: 'relative' }}>
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <span
           style={{
             marginTop: 6,
@@ -494,6 +625,7 @@ function Block({
   if (block.type === 'quote') {
     return (
       <div
+        className="glenwyn-block-row"
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -504,6 +636,7 @@ function Block({
           position: 'relative',
         }}
       >
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <textarea
           ref={setMainRef}
           className="glenwyn-block glenwyn-focus"
@@ -528,6 +661,7 @@ function Block({
   if (block.type === 'callout') {
     return (
       <div
+        className="glenwyn-block-row"
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -539,6 +673,7 @@ function Block({
           position: 'relative',
         }}
       >
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <Lightbulb size={16} strokeWidth={1.75} style={{ marginTop: 2, flexShrink: 0 }} color={t.fern} />
         <textarea
           ref={setMainRef}
@@ -559,7 +694,8 @@ function Block({
   if (block.type === 'toggle') {
     const isOpen = block.open !== false;
     return (
-      <div style={{ margin: '2px 0', position: 'relative' }}>
+      <div className="glenwyn-block-row" style={{ margin: '2px 0', position: 'relative' }}>
+        <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
           <span
             onClick={onToggleOpen}
@@ -656,7 +792,8 @@ function Block({
   const showMentionDisplay = block.type === 'text' && !isTextFocused && hasMentions(block.content);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="glenwyn-block-row" style={{ position: 'relative' }}>
+      <BlockHoverControls t={t} onAdd={openSlashMenu} onFocusBlock={focusBlock} locked={locked} />
       {showMentionDisplay ? (
         <div
           role="button"
@@ -704,14 +841,62 @@ function Block({
           value={block.content}
           onChange={(e) => handleChange(e.target.value, e.target.selectionStart)}
           onKeyDown={handleKeyDown}
+          onSelect={(e) => refreshSelectionBar(e.target)}
+          onMouseUp={(e) => refreshSelectionBar(e.currentTarget)}
+          onKeyUp={(e) => refreshSelectionBar(e.currentTarget)}
           onFocus={() => setIsTextFocused(true)}
           onBlur={() => {
             setIsTextFocused(false);
             setMentionTrigger(null);
+            setSelectionBar(null);
           }}
           placeholder="Escribe algo, '/' para comandos, [[ para mencionar una página, o Enter para una línea nueva…"
           style={sharedTextareaStyle}
         />
+      )}
+      {selectionBar && (
+        <div
+          role="toolbar"
+          aria-label="Convertir selección"
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: 'absolute',
+            left: Math.max(0, Math.min(selectionBar.x, 400)),
+            top: selectionBar.y - 44,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px',
+            background: t.bark,
+            color: t.canvas,
+            borderRadius: 7,
+            boxShadow: elevation.menu,
+            zIndex: 6,
+            fontSize: 12,
+            animation: 'glenwyn-popper 160ms ease-out',
+          }}
+        >
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={convertSelection}
+            title="Crear nota atómica con el texto seleccionado"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 8px',
+              background: 'transparent',
+              border: 'none',
+              color: t.canvas,
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            <FilePlus size={14} />
+            <span>Crear nota atómica</span>
+          </button>
+        </div>
       )}
       {slashOpen && <SlashMenu t={t} commands={filteredCommands} index={slashIndex} onPick={runCommand} />}
       {mentionTrigger && (
@@ -725,9 +910,10 @@ function Block({
             background: t.canvas,
             border: `1px solid ${t.clay}`,
             borderRadius: 8,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            boxShadow: elevation.menu,
             zIndex: 5,
             overflow: 'hidden',
+            animation: 'glenwyn-popper 160ms ease-out',
           }}
         >
           {filteredMentionPages.length === 0 ? (

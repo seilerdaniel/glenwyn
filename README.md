@@ -53,7 +53,7 @@ npm run dev
 ```bash
 npm test
 ```
-Cubren las funciones puras de `lib/pageUtils.js` (árbol de páginas, backlinks, rollups, atajos de markdown, y más) — no hay tests de componentes de React todavía, solo de la lógica que no depende de la interfaz.
+Cubren las funciones puras de `src/lib/pageUtils.js` (árbol de páginas, backlinks, rollups, atajos de markdown, y más) — no hay tests de componentes de React todavía, solo de la lógica que no depende de la interfaz.
 
 ## Estructura
 ```

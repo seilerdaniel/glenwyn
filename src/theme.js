@@ -16,6 +16,7 @@ export const tokens = {
     sun: '#D9A542',
     sidebarBg: '#F5EAD3',
     error: '#A8432E',
+    modalBorder: 'rgba(0,0,0,0.08)',
   },
   dark: {
     canvas: '#211A0D',
@@ -27,9 +28,25 @@ export const tokens = {
     sun: '#E8B563',
     sidebarBg: '#1C160B',
     error: '#E08A65',
+    modalBorder: 'rgba(255,255,255,0.08)',
   },
 };
 
 export const displayFont = "'Fraunces', Georgia, serif";
 export const bodyFont = "'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 export const monoFont = "'JetBrains Mono', ui-monospace, monospace";
+
+// ---- Motion & elevation tokens (DESIGN_AUDIT.md) ----
+// Single source of truth for micro-interactions so every menu/hover/modal shares
+// the same timing and shadow vocabulary instead of each component hard-coding its
+// own transition duration and box-shadow literal.
+export const motion = {
+  fast: '150ms ease',
+  base: '200ms ease',
+  // micro-interacciones (hover, focus, menús) → 150ms; paneles grandes → 200ms
+};
+
+export const elevation = {
+  menu: '0 6px 16px rgba(0,0,0,0.12)',
+  modal: '0 18px 50px rgba(0,0,0,0.28)',
+};

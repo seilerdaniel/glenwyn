@@ -1,21 +1,54 @@
-import React from 'react';
-import { displayFont, monoFont } from '../theme';
-import { truncateLabel } from '../lib/pageUtils';
-import { Trash2, Flag, Repeat } from 'lucide-react';
+import React, { useState } from 'react';
+import { displayFont, bodyFont, monoFont, motion } from '../theme';
+import { truncateLabel, countWords, getPageMaturity, getPageAge } from '../lib/pageUtils';
+import { Trash2, Flag, Repeat, FilePlus, ArrowUpRight, X, ChevronRight } from 'lucide-react';
+
+// Cheap hex→rgba once-alpha helper so badges/tints can reuse theme tokens at low
+// opacity (light & dark both work because the source hex is mode-aware).
+function hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return hex;
+  const [, r, g, b] = m;
+  return `rgba(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, ${alpha})`;
+}
 
 export function TasksView({ t, tasks, today, onToggle, onOpenPage }) {
-  const overdue = tasks.filter((tsk) => !tsk.checked && tsk.dueDate < today);
-  const dueToday = tasks.filter((tsk) => !tsk.checked && tsk.dueDate === today);
-  const upcoming = tasks.filter((tsk) => !tsk.checked && tsk.dueDate > today);
+  const [closedGroups, setClosedGroups] = useState(() => new Set(['done']));
+
+  const parsedToday = today || new Date().toISOString().slice(0, 10);
+  // Horizon = today + 7 days, computed in UTC so it stays consistent with the
+  // YYYY-MM-DD strings that `today` already uses (toISOString is UTC).
+  const horizon = (() => {
+    const [y, m, d] = parsedToday.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10);
+  })();
+
+  const pending = tasks.filter((tsk) => !tsk.checked);
+  const overdue = pending.filter((tsk) => tsk.dueDate && tsk.dueDate < parsedToday);
+  const todayList = pending.filter((tsk) => tsk.dueDate === parsedToday);
+  const nextSeven = pending.filter((tsk) => tsk.dueDate && tsk.dueDate > parsedToday && tsk.dueDate <= horizon);
+  const later = pending.filter((tsk) => !tsk.dueDate || tsk.dueDate > horizon);
   const done = tasks.filter((tsk) => tsk.checked);
 
   const groups = [
-    { label: 'Vencidas', items: overdue, color: t.error },
-    { label: 'Hoy', items: dueToday, color: t.moss },
-    { label: 'Próximas', items: upcoming, color: t.fern },
+    { id: 'overdue', label: 'Vencidas', items: overdue, color: t.error },
+    { id: 'today', label: 'Hoy', items: todayList, color: t.moss },
+    { id: 'next7', label: 'Próximos 7 días', items: nextSeven, color: t.fern },
+    { id: 'later', label: 'Sin fecha / Más adelante', items: later, color: t.fern },
   ];
 
-  const hasAnyPending = overdue.length + dueToday.length + upcoming.length > 0;
+  const toggleGroup = (id) =>
+    setClosedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+
+  const anyPending = pending.length > 0;
 
   return (
     <div>
@@ -23,54 +56,82 @@ export function TasksView({ t, tasks, today, onToggle, onOpenPage }) {
         Mis tareas
       </div>
 
-      {!hasAnyPending && (
+      {!anyPending && !done.length && (
         <div style={{ fontSize: 13.5, color: t.fern, marginBottom: 24 }}>
-          No tenés tareas pendientes con fecha. Agregá una fecha de vencimiento desde cualquier tarea (📅) para
-          verla acá.
+          No tenés tareas todavía. Creá una tarea desde cualquier página (o convertila marcando `- [ ]`)
         </div>
       )}
 
-      {groups.map(
-        (group) =>
-          group.items.length > 0 && (
-            <div key={group.label} style={{ marginBottom: 28 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  color: group.color,
-                  fontFamily: monoFont,
-                  marginBottom: 8,
-                }}
-              >
+      {groups.map((group) =>
+        group.items.length > 0 ? (
+          <div key={group.id} style={{ marginBottom: 22 }}>
+            <button
+              onClick={() => toggleGroup(group.id)}
+              className="glenwyn-focus"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: group.color,
+                textAlign: 'left',
+                padding: '4px 0',
+                marginBottom: 6,
+              }}
+            >
+              <ChevronRight
+                size={13}
+                strokeWidth={2}
+                style={{ transition: `transform ${motion.fast}`, transform: closedGroups.has(group.id) ? 'none' : 'rotate(90deg)', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: monoFont }}>
                 {group.label} · {group.items.length}
-              </div>
-              {group.items.map((tsk) => (
+              </span>
+            </button>
+            {!closedGroups.has(group.id) &&
+              group.items.map((tsk) => (
                 <TaskRow key={tsk.blockId} t={t} task={tsk} onToggle={onToggle} onOpenPage={onOpenPage} />
               ))}
-            </div>
-          )
+          </div>
+        ) : null
       )}
 
       {done.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          <div
+          <button
+            onClick={() => toggleGroup('done')}
+            aria-expanded={!closedGroups.has('done')}
             style={{
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
               color: t.fern,
-              fontFamily: monoFont,
-              marginBottom: 8,
-              opacity: 0.7,
+              textAlign: 'left',
+              padding: '4px 0',
+              marginBottom: 6,
+              opacity: 0.8,
             }}
           >
-            Completadas · {done.length}
-          </div>
-          {done.map((tsk) => (
-            <TaskRow key={tsk.blockId} t={t} task={tsk} onToggle={onToggle} onOpenPage={onOpenPage} />
-          ))}
+            <ChevronRight
+              size={13}
+              strokeWidth={2}
+              style={{ transform: closedGroups.has('done') ? 'rotate(0deg)' : 'rotate(90deg)', transition: `transform ${motion.fast}`, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: monoFont }}>
+              Completadas · {done.length}
+            </span>
+          </button>
+          {!closedGroups.has('done') &&
+            done.map((tsk) => (
+              <TaskRow key={tsk.blockId} t={t} task={tsk} onToggle={onToggle} onOpenPage={onOpenPage} />
+            ))}
         </div>
       )}
     </div>
@@ -141,6 +202,16 @@ export function OrphanPagesView({ t, pages, onOpenPage, onArchive }) {
 }
 
 export function TaskRow({ t, task, onToggle, onOpenPage }) {
+  // Priority badges — Todoist-flavored: a soft tinted pill per level instead of a
+  // lone flag. Colors derive from the theme tokens (warm red / honey / neutral)
+  // with alpha, so they read as "tenue" and survive both light and dark mode.
+  const PRIORITY_BADGES = {
+    1: { label: 'P1 · Urgente', color: t.error, bg: hexToRgba(t.error, 0.12) },
+    2: { label: 'P2 · Alta', color: t.moss, bg: hexToRgba(t.sun, 0.16) },
+    3: { label: 'P3 · Normal', color: t.fern, bg: hexToRgba(t.fern, 0.12) },
+  };
+  const badge = task.priority ? PRIORITY_BADGES[task.priority] : null;
+
   return (
     <div
       style={{
@@ -158,12 +229,26 @@ export function TaskRow({ t, task, onToggle, onOpenPage }) {
         aria-label={`Tarea: ${task.content}`}
         style={{ accentColor: t.moss, cursor: 'pointer', flexShrink: 0 }}
       />
-      {task.priority && (
+      {badge && (
         <span
-          style={{ color: { 1: t.error, 2: t.sun, 3: t.fern }[task.priority], flexShrink: 0, display: 'flex' }}
-          title={{ 1: 'Prioridad alta', 2: 'Prioridad media', 3: 'Prioridad baja' }[task.priority]}
+          title={badge.label}
+          style={{
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 10.5,
+            fontFamily: monoFont,
+            letterSpacing: '0.02em',
+            color: badge.color,
+            background: badge.bg,
+            border: `1px solid ${hexToRgba(badge.color, 0.28)}`,
+            borderRadius: 5,
+            padding: '1px 6px',
+          }}
         >
-          <Flag size={12} strokeWidth={1.75} fill="currentColor" />
+          <Flag size={10} strokeWidth={2} fill="currentColor" />
+          {badge.label}
         </span>
       )}
       <span
@@ -314,6 +399,326 @@ export function MiniGraphMap({ t, centerPage, incoming, outgoing, onNavigate }) 
       </div>
     </div>
   );
+}
+
+// FASE 2 — Sugerencias de vínculos automáticos. Una sección discreta al pie de la
+// página que propone otras notas del workspace con solapamiento de contenido, sin
+// llegar a conectar nada por vos: cada sugerencia ofrece insertar el [[enlace]] o
+// navegar directo. Los datos ya llegan calculados desde App.jsx (findRelatedPages,
+// debounced) — este componente solo los pinta.
+export function RelatedNotesSuggestions({ t, suggestions, onInsertLink, onNavigate }) {
+  if (!suggestions || suggestions.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 48, paddingTop: 20, borderTop: `1px solid ${t.clay}` }}>
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: t.fern,
+          fontFamily: monoFont,
+          marginBottom: 10,
+        }}
+      >
+        Notas relacionadas sugeridas
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {suggestions.map((s) => (
+          <div
+            key={s.page.id}
+            role="button"
+            tabIndex={0}
+            className="glenwyn-focus"
+            onClick={() => onNavigate(s.page.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onNavigate(s.page.id);
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '8px 10px',
+              borderRadius: 7,
+              cursor: 'pointer',
+              background: 'transparent',
+              transition: `background ${motion.fast}`,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <span style={{ fontSize: 15, flexShrink: 0 }}>{s.page.icon || '📄'}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: 13.5,
+                  color: t.bark,
+                  fontWeight: 500,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {s.page.title || 'Sin título'}
+              </span>
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: 11.5,
+                  color: t.fern,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {s.matchedTerms && s.matchedTerms.length > 0
+                ? `coincide en: ${s.matchedTerms.map((m) => truncateLabel(m, 22)).join(' · ')}`
+                : s.page.title}
+              </span>
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                color: t.fern,
+                fontFamily: monoFont,
+                flexShrink: 0,
+                minWidth: 34,
+                textAlign: 'right',
+              }}
+            >
+              {(s.score || 0).toFixed(1)}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInsertLink(s.page);
+              }}
+              title={`Insertar [[${s.page.title || 'Sin título'}]] en el bloque actual`}
+              aria-label={`Insertar enlace a ${s.page.title || 'Sin título'}`}
+              className="glenwyn-focus"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: t.canvasAlt,
+                border: `1px solid ${t.clay}`,
+                borderRadius: 6,
+                color: t.moss,
+                padding: '3px 8px',
+                cursor: 'pointer',
+                fontSize: 11.5,
+                flexShrink: 0,
+                transition: `background ${motion.fast}, color ${motion.fast}`,
+              }}
+            >
+              <FilePlus size={12} strokeWidth={1.75} />
+              enlazar
+            </button>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                color: t.fern,
+                flexShrink: 0,
+              }}
+              title="Abrir la nota"
+            >
+              <ArrowUpRight size={13} strokeWidth={1.75} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: t.fern, marginTop: 6, opacity: 0.75 }}>
+        Sugerencias por solapamiento de contenido — click para abrir, o "enlazar" para insertar el [[enlace]].
+      </div>
+    </div>
+  );
+}
+
+// Maturity stages for the Inspector's note summary — a Zettelkasten-flavored
+// read on how developed a note is, combining its length and how long it's been
+// around. Emoji + short label, decided purely from signals that already exist.
+function maturityStage(page, backlinkCount) {
+  const words = countWords(page);
+  const maturity = getPageMaturity(page, backlinkCount);
+  const age = getPageAge(page);
+  if (age === 'old' && words >= 40) return { emoji: '📜', label: 'Añeja', desc: 'vieja y asentada' };
+  if (maturity === 'permanente') return { emoji: '🌳', label: 'Árbol', desc: 'conectada y extensa' };
+  if (maturity === 'en_proceso') return { emoji: '🌿', label: 'Brote', desc: 'con conexiones, creciendo' };
+  if (words >= 20) return { emoji: '🌱', label: 'Semilla', desc: 'todavía corta' };
+  return { emoji: '🌱', label: 'Semilla', desc: 'recién plantada' };
+}
+
+// Right-hand Inspector drawer — the Second Brain views (local graph, backlinks,
+// related notes) plus a quick maturity/readability summary, moved off the bottom
+// of the editor into a retractable right-side panel so the canvas stays clean.
+// Slides in from the right with a CSS transform transition. On narrow screens it
+// acts as a full-height overlay drawer with a backdrop; on wide screens it's a
+// persistent panel that pushes the canvas left.
+export function InspectorDrawer({
+  t,
+  showInspector,
+  isNarrow,
+  onClose,
+  activePage,
+  backlinks,
+  outgoingLinks,
+  relatedSuggestions,
+  onNavigate,
+  onInsertLink,
+  backlinkCount,
+}) {
+  if (!showInspector) return null;
+
+  const words = activePage ? countWords(activePage) : 0;
+  const readMinutes = Math.max(1, Math.ceil(words / 200)); // ~200 words/min
+  const stage = activePage ? maturityStage(activePage, backlinkCount) : { emoji: '🌱', label: 'Semilla', desc: '' };
+
+  const panel = (
+    <div
+      role="complementary"
+      aria-label="Inspector de la página"
+      style={{
+        width: 320,
+        flexShrink: 0,
+        height: '100%',
+        background: t.canvas,
+        borderLeft: `1px solid ${t.clay}`,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'glenwyn-slide-in-right 150ms ease-out',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 10px', borderBottom: `1px solid ${t.clay}` }}>
+        <span style={{ fontSize: 11, fontFamily: monoFont, textTransform: 'uppercase', letterSpacing: '0.04em', color: t.fern }}>
+          Inspector
+        </span>
+        <button
+          onClick={onClose}
+          title="Cerrar inspector (Esc)"
+          aria-label="Cerrar inspector"
+          className="glenwyn-focus"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.fern, display: 'flex', padding: 2 }}
+        >
+          <X size={15} strokeWidth={1.75} />
+        </button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px' }}>
+        {activePage && (
+          <div style={{ background: t.canvasAlt, border: `1px solid ${t.clay}`, borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: t.bark, fontWeight: 600, marginBottom: 8 }}>
+              <span>{stage.emoji}</span>
+              <span>{stage.label}</span>
+              <span style={{ fontWeight: 400, color: t.fern, marginLeft: 'auto', fontSize: 11.5 }}>
+                {words} palabras · {readMinutes} min de lectura
+              </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: t.fern }}>
+              {stage.desc}
+              {backlinkCount > 0 && ` · ${backlinkCount === 1 ? '1 página te menciona' : `${backlinkCount} páginas te mencionan`}`}
+            </div>
+          </div>
+        )}
+
+        {activePage && (backlinks.length > 0 || outgoingLinks.length > 0) && (
+          <div style={{ marginBottom: 18 }}>
+            <MiniGraphMap
+              t={t}
+              centerPage={activePage}
+              incoming={backlinks}
+              outgoing={outgoingLinks}
+              onNavigate={onNavigate}
+            />
+          </div>
+        )}
+
+        {activePage && backlinks.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                color: t.fern,
+                fontFamily: monoFont,
+                marginBottom: 8,
+                paddingBottom: 8,
+                borderBottom: `1px solid ${t.clay}`,
+              }}
+            >
+              {backlinks.length === 1 ? '1 página te menciona' : `${backlinks.length} páginas te mencionan`}
+            </div>
+            {backlinks.map((p) => (
+              <div
+                key={p.id}
+                role="button"
+                tabIndex={0}
+                className="glenwyn-focus"
+                onClick={() => onNavigate(p.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onNavigate(p.id);
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  borderRadius: 7,
+                  cursor: 'pointer',
+                  fontSize: 13.5,
+                  color: t.bark,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = t.clay)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span>{p.icon || '📄'}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.title || 'Sin título'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <RelatedNotesSuggestions
+          t={t}
+          suggestions={relatedSuggestions}
+          onInsertLink={onInsertLink}
+          onNavigate={onNavigate}
+        />
+      </div>
+    </div>
+  );
+
+  if (isNarrow) {
+    return (
+      <>
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(20,20,15,0.35)',
+            zIndex: 11,
+            animation: 'glenwyn-popper 160ms ease-out',
+          }}
+        />
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 12 }}>{panel}</div>
+      </>
+    );
+  }
+
+  return panel;
 }
 
 

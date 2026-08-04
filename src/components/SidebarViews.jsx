@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { displayFont } from '../theme';
+import { displayFont, motion, elevation } from '../theme';
 import { Star, Trash2, MoreHorizontal, Copy, Link2, Download, History, FolderInput } from 'lucide-react';
 
 export function PageRow({
@@ -39,6 +39,7 @@ export function PageRow({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [actionsMenuPos, setActionsMenuPos] = useState(null);
+  const [rowHovered, setRowHovered] = useState(false);
   const actionsButtonRef = useRef(null);
 
   useEffect(() => {
@@ -113,14 +114,23 @@ export function PageRow({
           gap: 6,
           padding: sidebarOpen ? '7px 8px' : '7px 0',
           paddingLeft: sidebarOpen ? 8 + depth * 14 : 0,
-          borderRadius: 7,
+          borderRadius: 6,
           cursor: 'grab',
-          background: isDropInside ? t.moss + '33' : isActive ? t.clay : 'transparent',
+          background: isDropInside
+            ? t.moss + '33'
+            : isActive
+              ? t.clay
+              : rowHovered && sidebarOpen
+                ? t.clay + '77'
+                : 'transparent',
+          transition: `background-color ${motion.fast}`,
           outline: isDropInside ? `1.5px dashed ${t.moss}` : 'none',
           outlineOffset: -1.5,
           marginBottom: 1,
           opacity: isDragging ? 0.4 : 1,
         }}
+        onMouseEnter={() => setRowHovered(true)}
+        onMouseLeave={() => setRowHovered(false)}
       >
         <div
           style={{
@@ -210,7 +220,11 @@ export function PageRow({
         {sidebarOpen && (
           <div
             className="glenwyn-page-actions"
-            style={{ position: 'relative', opacity: actionsMenuOpen ? 1 : undefined }}
+            style={{
+              position: 'relative',
+              opacity: actionsMenuOpen || rowHovered ? 1 : 0,
+              transition: `opacity ${motion.fast}`,
+            }}
           >
             <button
               ref={actionsButtonRef}
@@ -256,9 +270,10 @@ export function PageRow({
                     background: t.canvas,
                     border: `1px solid ${t.clay}`,
                     borderRadius: 8,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    boxShadow: elevation.menu,
                     zIndex: 50,
                     overflow: 'hidden',
+                    animation: 'glenwyn-popper 160ms ease-out',
                   }}
                 >
                   {[
@@ -344,9 +359,10 @@ export function IconPicker({ t, current, onPick }) {
         background: t.canvas,
         border: `1px solid ${t.clay}`,
         borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        boxShadow: elevation.menu,
         zIndex: 8,
         padding: 8,
+        animation: 'glenwyn-popper 160ms ease-out',
       }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, marginBottom: 8 }}>
